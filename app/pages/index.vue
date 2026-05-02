@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type { LinkPreview } from '@/types/entry'
+import { parseLinkEmbed } from '@/lib/linkEmbeds'
+import LinkAttachment from '@/components/LinkAttachment.vue'
 import { useDebounceFn } from '@vueuse/core'
 import {
   TagsInput,
@@ -57,6 +59,16 @@ const fetchPreview = useDebounceFn(async () => {
 
 watch(url, () => {
   void fetchPreview()
+})
+
+const urlTrimmed = computed(() => url.value.trim())
+
+const showLinkAttachment = computed(() => {
+  const u = urlTrimmed.value
+  if (!u) return false
+  if (parseLinkEmbed(u)) return true
+  if (previewLoading.value) return false
+  return Boolean(preview.value)
 })
 
 async function onSubmit() {
@@ -165,32 +177,11 @@ async function onSubmit() {
         <p v-else-if="previewError" class="text-xs text-destructive">{{ previewError }}</p>
       </div>
 
-      <Card
-        v-if="preview && (preview.title || preview.description || preview.image)"
-        class="overflow-hidden border-border/70 bg-card/60"
-      >
-        <div class="flex gap-4 p-4">
-          <div
-            v-if="preview.image"
-            class="h-20 w-28 shrink-0 overflow-hidden rounded-md bg-muted"
-          >
-            <img
-              :src="preview.image"
-              :alt="preview.title ?? ''"
-              class="h-full w-full object-cover"
-            />
-          </div>
-          <div class="min-w-0 space-y-1">
-            <p class="text-sm font-medium leading-snug line-clamp-2">
-              {{ preview.title || preview.siteName || 'Link' }}
-            </p>
-            <p v-if="preview.description" class="text-xs text-muted-foreground line-clamp-3">
-              {{ preview.description }}
-            </p>
-            <p class="truncate text-xs text-muted-foreground/80">{{ preview.url }}</p>
-          </div>
-        </div>
-      </Card>
+      <LinkAttachment
+        v-if="showLinkAttachment"
+        :url="urlTrimmed"
+        :link-preview="preview"
+      />
 
       <div class="space-y-2">
         <Label class="text-xs font-medium uppercase tracking-wider text-muted-foreground">

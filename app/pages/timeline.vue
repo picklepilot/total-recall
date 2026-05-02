@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { parseEntryDoc } from "@/lib/tiptapShared";
+import LinkAttachment from "@/components/LinkAttachment.vue";
 
 const firebaseConfigured = useFirebaseUiReady();
 const { entries } = useEntries();
@@ -94,62 +95,7 @@ function formatDay(d: Date) {
           </ClientOnly>
         </div>
         <div v-if="item.url" class="mt-3 text-sm">
-          <a
-            v-if="
-              item.linkPreview &&
-              (item.linkPreview.title ||
-                item.linkPreview.description ||
-                item.linkPreview.image ||
-                item.linkPreview.siteName)
-            "
-            :href="item.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="block overflow-hidden rounded-xl border border-border/70 bg-card/60 hover:bg-card/80 hover:shadow-md transition-all top-0 hover:top-[-2px] relative"
-          >
-            <div class="flex gap-4 p-4">
-              <div
-                v-if="item.linkPreview.image"
-                class="h-20 w-28 shrink-0 overflow-hidden rounded-md bg-muted"
-              >
-                <img
-                  :src="item.linkPreview.image"
-                  :alt="item.linkPreview.title ?? ''"
-                  class="h-full w-full object-cover"
-                  loading="lazy"
-                />
-              </div>
-              <div class="min-w-0 space-y-1">
-                <p
-                  class="text-sm font-medium leading-snug text-primary line-clamp-2"
-                >
-                  {{
-                    item.linkPreview.title ||
-                    item.linkPreview.siteName ||
-                    "Link"
-                  }}
-                </p>
-                <p
-                  v-if="item.linkPreview.description"
-                  class="text-xs text-muted-foreground line-clamp-3"
-                >
-                  {{ item.linkPreview.description }}
-                </p>
-                <p class="truncate text-xs text-muted-foreground/80">
-                  {{ item.url }}
-                </p>
-              </div>
-            </div>
-          </a>
-          <a
-            v-else
-            :href="item.url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="font-medium text-primary underline underline-offset-4"
-          >
-            {{ item.linkPreview?.title || item.url }}
-          </a>
+          <LinkAttachment :url="item.url" :link-preview="item.linkPreview" />
         </div>
       </article>
     </div>

@@ -6,7 +6,7 @@ const route = useRoute()
 const nuxtApp = useNuxtApp()
 const { user, signedIn, signInWithGoogle, logout } = useAuth()
 
-const firebaseConfigured = computed(() => Boolean(nuxtApp.$firebaseReady))
+const firebaseConfigured = useFirebaseUiReady()
 
 const isDark = useDark({ storageKey: 'total-recall-color-scheme' })
 
@@ -55,17 +55,37 @@ async function onSignIn() {
             >
               Timeline
             </NuxtLink>
+            <NuxtLink
+              to="/ask"
+              class="transition-colors hover:text-foreground"
+              :class="route.path === '/ask' ? 'text-foreground font-medium' : ''"
+            >
+              Ask
+            </NuxtLink>
           </div>
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            class="shrink-0 text-muted-foreground hover:text-foreground"
-            :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
-            @click="toggleColorMode"
-          >
-            <Sun v-if="isDark" class="size-4" />
-            <Moon v-else class="size-4" />
-          </Button>
+          <ClientOnly>
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              class="shrink-0 text-muted-foreground hover:text-foreground"
+              :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+              @click="toggleColorMode"
+            >
+              <Sun v-if="isDark" class="size-4" />
+              <Moon v-else class="size-4" />
+            </Button>
+            <template #fallback>
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                class="pointer-events-none shrink-0 opacity-0"
+                aria-hidden="true"
+                tabindex="-1"
+              >
+                <Moon class="size-4" />
+              </Button>
+            </template>
+          </ClientOnly>
           <div class="flex items-center gap-2">
             <template v-if="firebaseConfigured && signedIn && user">
               <span class="hidden max-w-[140px] truncate text-xs text-muted-foreground sm:inline">

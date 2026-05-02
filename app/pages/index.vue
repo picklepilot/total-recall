@@ -6,7 +6,7 @@ const nuxtApp = useNuxtApp()
 const { ready, addEntry } = useEntries()
 const { signedIn, authHeaders } = useAuth()
 
-const firebaseConfigured = computed(() => Boolean(nuxtApp.$firebaseReady))
+const firebaseConfigured = useFirebaseUiReady()
 
 const feedback = ref<{ type: 'ok' | 'err'; text: string } | null>(null)
 
@@ -61,7 +61,7 @@ watch(url, () => {
 
 async function onSubmit() {
   feedback.value = null
-  if (!firebaseConfigured.value) {
+  if (!nuxtApp.$firebaseReady) {
     feedback.value = {
       type: 'err',
       text: 'Firebase is not configured. Add NUXT_PUBLIC_FIREBASE_* to .env.',

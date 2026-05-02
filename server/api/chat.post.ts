@@ -1,3 +1,5 @@
+import { buildLogChatSystemPrompt } from '../utils/logChatPrompt'
+
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
@@ -28,17 +30,7 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const memory = body.memoryContext?.trim() || '(No entries in context.)'
-  const system = `You are a calm, concise personal memory assistant. The user keeps a private log of links, notes, and tags.
-
-Rules:
-- Answer ONLY using the "Memory log" section below. If the log does not contain the answer, say you do not see that in their log and suggest what they could log next time.
-- Prefer recency when the question asks for "latest" or "most recent".
-- Be specific: cite titles, tags, or short quotes from the log when helpful.
-- Do not invent entries or URLs.
-
-Memory log:
-${memory}`
+  const system = buildLogChatSystemPrompt(body.memoryContext ?? '')
 
   const lastUser = [...body.messages].reverse().find((m) => m.role === 'user')
   const question = lastUser?.content ?? ''

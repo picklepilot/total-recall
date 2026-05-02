@@ -14,6 +14,12 @@ export default defineNuxtConfig({
           content: 'A minimal log for links and thoughts, with a timeline and AI over your own entries.',
         },
       ],
+      script: [
+        {
+          key: 'theme-init',
+          innerHTML: `(function(){try{var k='total-recall-color-scheme';var s=localStorage.getItem(k);var d=s==='dark'||((s===null||s==='auto')&&window.matchMedia('(prefers-color-scheme: dark)').matches);if(d)document.documentElement.classList.add('dark');}catch(e){}})();`,
+        },
+      ],
     },
   },
 

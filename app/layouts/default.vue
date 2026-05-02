@@ -1,9 +1,18 @@
 <script setup lang="ts">
+import { Moon, Sun } from 'lucide-vue-next'
+import { useDark } from '@vueuse/core'
+
 const route = useRoute()
 const nuxtApp = useNuxtApp()
 const { user, signedIn, signInWithGoogle, logout } = useAuth()
 
 const firebaseConfigured = computed(() => Boolean(nuxtApp.$firebaseReady))
+
+const isDark = useDark({ storageKey: 'total-recall-color-scheme' })
+
+function toggleColorMode() {
+  isDark.value = !isDark.value
+}
 
 const signingIn = ref(false)
 async function onSignIn() {
@@ -47,6 +56,16 @@ async function onSignIn() {
               Timeline
             </NuxtLink>
           </div>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            class="shrink-0 text-muted-foreground hover:text-foreground"
+            :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+            @click="toggleColorMode"
+          >
+            <Sun v-if="isDark" class="size-4" />
+            <Moon v-else class="size-4" />
+          </Button>
           <div class="flex items-center gap-2">
             <template v-if="firebaseConfigured && signedIn && user">
               <span class="hidden max-w-[140px] truncate text-xs text-muted-foreground sm:inline">

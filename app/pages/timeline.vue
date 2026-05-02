@@ -1,67 +1,75 @@
 <script setup lang="ts">
-import { entriesToMemoryContext } from '@/utils/memoryContext'
+import { entriesToMemoryContext } from "@/utils/memoryContext";
 
-const nuxtApp = useNuxtApp()
-const firebaseConfigured = computed(() => Boolean(nuxtApp.$firebaseReady))
-const { entries, ready } = useEntries()
-const { signedIn, authHeaders } = useAuth()
+const nuxtApp = useNuxtApp();
+const firebaseConfigured = computed(() => Boolean(nuxtApp.$firebaseReady));
+const { entries, ready } = useEntries();
+const { signedIn, authHeaders } = useAuth();
 
-const messages = ref<{ role: 'user' | 'assistant'; content: string }[]>([])
-const chatInput = ref('')
-const sending = ref(false)
-const chatError = ref('')
+const messages = ref<{ role: "user" | "assistant"; content: string }[]>([]);
+const chatInput = ref("");
+const sending = ref(false);
+const chatError = ref("");
 
-const scrollRef = ref<HTMLElement | null>(null)
+const scrollRef = ref<HTMLElement | null>(null);
 
 watch(
   () => messages.value.length,
   async () => {
-    await nextTick()
-    scrollRef.value?.scrollTo({ top: scrollRef.value.scrollHeight, behavior: 'smooth' })
+    await nextTick();
+    scrollRef.value?.scrollTo({
+      top: scrollRef.value.scrollHeight,
+      behavior: "smooth",
+    });
   },
-)
+);
 
 async function sendMessage() {
-  const text = chatInput.value.trim()
-  if (!text || sending.value) return
-  chatError.value = ''
-  messages.value = [...messages.value, { role: 'user', content: text }]
-  chatInput.value = ''
-  sending.value = true
+  const text = chatInput.value.trim();
+  if (!text || sending.value) return;
+  chatError.value = "";
+  messages.value = [...messages.value, { role: "user", content: text }];
+  chatInput.value = "";
+  sending.value = true;
   try {
-    const memoryContext = entriesToMemoryContext(entries.value)
-    const headers = await authHeaders()
-    const res = await $fetch<{ reply: string; modelUnavailable?: boolean }>('/api/chat', {
-      method: 'POST',
-      body: { messages: messages.value, memoryContext },
-      headers,
-    })
+    const memoryContext = entriesToMemoryContext(entries.value);
+    const headers = await authHeaders();
+    const res = await $fetch<{ reply: string; modelUnavailable?: boolean }>(
+      "/api/chat",
+      {
+        method: "POST",
+        body: { messages: messages.value, memoryContext },
+        headers,
+      },
+    );
     messages.value = [
       ...messages.value,
-      { role: 'assistant', content: res.reply },
-    ]
+      { role: "assistant", content: res.reply },
+    ];
   } catch (e: unknown) {
-    const err = e as { data?: { statusMessage?: string }; message?: string }
-    chatError.value = err?.data?.statusMessage || err?.message || 'Request failed.'
+    const err = e as { data?: { statusMessage?: string }; message?: string };
+    chatError.value =
+      err?.data?.statusMessage || err?.message || "Request failed.";
     messages.value = [
       ...messages.value,
       {
-        role: 'assistant',
-        content: 'Something went wrong. Check NUXT_GEMINI_API_KEY and try again.',
+        role: "assistant",
+        content:
+          "Something went wrong. Check NUXT_GEMINI_API_KEY and try again.",
       },
-    ]
+    ];
   } finally {
-    sending.value = false
+    sending.value = false;
   }
 }
 
 function formatDay(d: Date) {
   return d.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 </script>
 
@@ -70,7 +78,8 @@ function formatDay(d: Date) {
     <div class="space-y-2">
       <h1 class="text-2xl font-semibold tracking-tight">Timeline</h1>
       <p class="text-sm text-muted-foreground leading-relaxed">
-        Newest first. Ask the assistant about anything that appears in this list.
+        Newest first. Ask the assistant about anything that appears in this
+        list.
       </p>
     </div>
 
@@ -78,7 +87,8 @@ function formatDay(d: Date) {
       <CardHeader>
         <CardTitle class="text-base">Connect Firebase</CardTitle>
         <CardDescription>
-          Once Firestore is configured, your entries will show up here in real time.
+          Once Firestore is configured, your entries will show up here in real
+          time.
         </CardDescription>
       </CardHeader>
     </Card>
@@ -86,12 +96,19 @@ function formatDay(d: Date) {
     <Card v-else-if="!signedIn" class="border-border/80 bg-muted/30">
       <CardHeader>
         <CardTitle class="text-base">Sign in</CardTitle>
-        <CardDescription> Sign in with Google in the header to load your timeline and chat. </CardDescription>
+        <CardDescription>
+          Sign in with Google in the header to load your timeline and chat.
+        </CardDescription>
       </CardHeader>
     </Card>
 
-    <div v-else-if="!entries.length" class="rounded-xl border border-dashed border-border py-16 text-center">
-      <p class="text-sm text-muted-foreground">No entries yet. Add something on the Add tab.</p>
+    <div
+      v-else-if="!entries.length"
+      class="rounded-xl border border-dashed border-border py-16 text-center"
+    >
+      <p class="text-sm text-muted-foreground">
+        No entries yet. Add something on the Add tab.
+      </p>
     </div>
 
     <div v-else class="space-y-5">
@@ -100,19 +117,74 @@ function formatDay(d: Date) {
         :key="item.id"
         class="rounded-xl border border-border/70 bg-card/40 px-5 py-4"
       >
-        <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-          <time :datetime="item.createdAt.toISOString()">{{ formatDay(item.createdAt) }}</time>
+        <div
+          class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
+        >
+          <time :datetime="item.createdAt.toISOString()">{{
+            formatDay(item.createdAt)
+          }}</time>
           <template v-if="item.tags.length">
             <span v-for="t in item.tags" :key="t">
               <Badge variant="secondary" class="font-normal">{{ t }}</Badge>
             </span>
           </template>
         </div>
-        <p v-if="item.contentText.trim()" class="mt-3 whitespace-pre-wrap text-sm leading-relaxed">
+        <p
+          v-if="item.contentText.trim()"
+          class="mt-3 whitespace-pre-wrap text-sm leading-relaxed"
+        >
           {{ item.contentText.trim() }}
         </p>
         <div v-if="item.url" class="mt-3 text-sm">
           <a
+            v-if="
+              item.linkPreview &&
+              (item.linkPreview.title ||
+                item.linkPreview.description ||
+                item.linkPreview.image ||
+                item.linkPreview.siteName)
+            "
+            :href="item.url"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="block overflow-hidden rounded-xl border border-border/70 bg-card/60 hover:bg-card/80 hover:shadow-md transition-all top-0 hover:top-[-2px] relative"
+          >
+            <div class="flex gap-4 p-4">
+              <div
+                v-if="item.linkPreview.image"
+                class="h-20 w-28 shrink-0 overflow-hidden rounded-md bg-muted"
+              >
+                <img
+                  :src="item.linkPreview.image"
+                  :alt="item.linkPreview.title ?? ''"
+                  class="h-full w-full object-cover"
+                  loading="lazy"
+                />
+              </div>
+              <div class="min-w-0 space-y-1">
+                <p
+                  class="text-sm font-medium leading-snug text-primary line-clamp-2"
+                >
+                  {{
+                    item.linkPreview.title ||
+                    item.linkPreview.siteName ||
+                    "Link"
+                  }}
+                </p>
+                <p
+                  v-if="item.linkPreview.description"
+                  class="text-xs text-muted-foreground line-clamp-3"
+                >
+                  {{ item.linkPreview.description }}
+                </p>
+                <p class="truncate text-xs text-muted-foreground/80">
+                  {{ item.url }}
+                </p>
+              </div>
+            </div>
+          </a>
+          <a
+            v-else
             :href="item.url"
             target="_blank"
             rel="noopener noreferrer"
@@ -130,8 +202,8 @@ function formatDay(d: Date) {
       <div>
         <h2 class="text-lg font-semibold tracking-tight">Ask your log</h2>
         <p class="mt-1 text-sm text-muted-foreground">
-          Answers use the entries above as context. Chat and link preview require a signed-in session
-          verified on the server.
+          Answers use the entries above as context. Chat and link preview
+          require a signed-in session verified on the server.
         </p>
       </div>
 
@@ -141,20 +213,20 @@ function formatDay(d: Date) {
             ref="scrollRef"
             class="max-h-[min(420px,50vh)] space-y-4 overflow-y-auto px-4 py-4"
           >
-            <p
-              v-if="!messages.length"
-              class="text-sm text-muted-foreground"
-            >
-              Try: “What was the most recent music I saved?” or “What did I note about Texas?”
+            <p v-if="!messages.length" class="text-sm text-muted-foreground">
+              Try: “What was the most recent music I saved?” or “What did I note
+              about Texas?”
             </p>
             <div
               v-for="(m, i) in messages"
               :key="i"
               class="text-sm leading-relaxed"
-              :class="m.role === 'user' ? 'text-foreground' : 'text-muted-foreground'"
+              :class="
+                m.role === 'user' ? 'text-foreground' : 'text-muted-foreground'
+              "
             >
               <span class="font-medium text-foreground/90">
-                {{ m.role === 'user' ? 'You' : 'Assistant' }}
+                {{ m.role === "user" ? "You" : "Assistant" }}
               </span>
               <p class="mt-1 whitespace-pre-wrap">{{ m.content }}</p>
             </div>
@@ -173,7 +245,7 @@ function formatDay(d: Date) {
               :disabled="sending || !signedIn"
               @click="sendMessage"
             >
-              {{ sending ? '…' : 'Send' }}
+              {{ sending ? "…" : "Send" }}
             </Button>
           </div>
         </CardContent>

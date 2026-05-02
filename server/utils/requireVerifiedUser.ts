@@ -1,12 +1,26 @@
 import { initializeApp, cert, getApps } from 'firebase-admin/app'
+import type { ServiceAccount } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
 import type { DecodedIdToken } from 'firebase-admin/auth'
 import type { H3Event } from 'h3'
 
-function ensureAdminApp(serviceAccountJson: string) {
+function parseServiceAccount(raw: string | ServiceAccount): ServiceAccount {
+  if (typeof raw === 'object' && raw !== null) return raw
+  return JSON.parse(raw) as ServiceAccount
+}
+
+function ensureAdminApp(raw: string | ServiceAccount) {
   if (getApps().length) return
-  const sa = JSON.parse(serviceAccountJson)
+  const sa = parseServiceAccount(raw)
   initializeApp({ credential: cert(sa) })
+}
+
+function isServiceAccountConfigured(raw: unknown): boolean {
+  if (raw == null) return false
+  if (typeof raw === 'string') return Boolean(raw.trim())
+  if (typeof raw === 'object' && !Array.isArray(raw))
+    return Object.keys(raw as object).length > 0
+  return false
 }
 
 /**
@@ -14,8 +28,8 @@ function ensureAdminApp(serviceAccountJson: string) {
  */
 export async function requireVerifiedUser(event: H3Event): Promise<DecodedIdToken> {
   const config = useRuntimeConfig(event)
-  const raw = config.firebaseServiceAccountJson
-  if (!raw || !String(raw).trim()) {
+  const raw = config.firebaseServiceAccountJson as string | ServiceAccount
+  if (!isServiceAccountConfigured(raw)) {
     throw createError({
       statusCode: 503,
       statusMessage:
@@ -23,7 +37,7 @@ export async function requireVerifiedUser(event: H3Event): Promise<DecodedIdToke
     })
   }
 
-  ensureAdminApp(String(raw))
+  ensureAdminApp(raw)
 
   const header = getRequestHeader(event, 'authorization')
   const m = header?.match(/^Bearer\s+(.+)$/i)

@@ -8,6 +8,7 @@ import {
   where,
   type Firestore,
 } from 'firebase/firestore'
+import type { User } from 'firebase/auth'
 import type { EntryDoc, EntryView, LinkPreview } from '@/types/entry'
 
 function mapDoc(id: string, data: EntryDoc): EntryView {
@@ -26,16 +27,17 @@ function mapDoc(id: string, data: EntryDoc): EntryView {
 
 export function useEntries() {
   const nuxtApp = useNuxtApp()
+  const user = useState<User | null>('firebase-auth-user', () => null)
   const db = computed(() => nuxtApp.$firebaseDb as Firestore | undefined)
-  const auth = computed(() => nuxtApp.$firebaseAuth)
-  const ready = computed(() => Boolean(nuxtApp.$firebaseReady && db.value && auth.value?.currentUser))
+  /** Must use reactive `user` from onAuthStateChanged — `auth.currentUser` is not Vue-reactive. */
+  const ready = computed(() => Boolean(nuxtApp.$firebaseReady && db.value && user.value))
 
   const entries = ref<EntryView[]>([])
   let unsub: (() => void) | null = null
 
   function subscribe() {
-    if (!db.value || !auth.value?.currentUser) return
-    const uid = auth.value.currentUser.uid
+    if (!db.value || !user.value) return
+    const uid = user.value.uid
     const q = query(
       collection(db.value, 'entries'),
       where('userId', '==', uid),
@@ -77,12 +79,12 @@ export function useEntries() {
     linkPreview: LinkPreview | null
     tags: string[]
   }) {
-    if (!db.value || !auth.value?.currentUser) {
+    if (!db.value || !user.value) {
       throw new Error('Sign in with Google to save entries.')
     }
     const ref = collection(db.value, 'entries')
     await addDoc(ref, {
-      userId: auth.value.currentUser.uid,
+      userId: user.value.uid,
       contentJson: payload.contentJson,
       contentText: payload.contentText,
       url: payload.url,

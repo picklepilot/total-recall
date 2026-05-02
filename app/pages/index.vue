@@ -1,6 +1,13 @@
 <script setup lang="ts">
 import type { LinkPreview } from '@/types/entry'
 import { useDebounceFn } from '@vueuse/core'
+import {
+  TagsInput,
+  TagsInputInput,
+  TagsInputItem,
+  TagsInputItemDelete,
+  TagsInputItemText,
+} from '@/components/ui/tags-input'
 
 const nuxtApp = useNuxtApp()
 const { ready, addEntry } = useEntries()
@@ -11,7 +18,7 @@ const firebaseConfigured = useFirebaseUiReady()
 const feedback = ref<{ type: 'ok' | 'err'; text: string } | null>(null)
 
 const url = ref('')
-const tagsInput = ref('')
+const tagsModel = ref<string[]>([])
 const contentJson = ref(JSON.stringify({ type: 'doc', content: [{ type: 'paragraph' }] }))
 const contentText = ref('')
 const preview = ref<LinkPreview | null>(null)
@@ -25,13 +32,6 @@ function onEditorChange(json: string, text: string) {
   contentJson.value = json
   contentText.value = text
 }
-
-const tags = computed(() =>
-  tagsInput.value
-    .split(',')
-    .map((t) => t.trim().toLowerCase())
-    .filter(Boolean),
-)
 
 const fetchPreview = useDebounceFn(async () => {
   preview.value = null
@@ -85,11 +85,11 @@ async function onSubmit() {
       contentText: contentText.value,
       url: hasUrl ? url.value.trim() : null,
       linkPreview: preview.value,
-      tags: tags.value,
+      tags: tagsModel.value.map((t) => t.trim().toLowerCase()).filter(Boolean),
     })
     feedback.value = { type: 'ok', text: 'Saved to your log.' }
     url.value = ''
-    tagsInput.value = ''
+    tagsModel.value = []
     preview.value = null
     previewError.value = ''
     editorRef.value?.clear()
@@ -210,19 +210,29 @@ async function onSubmit() {
 
       <div class="space-y-2">
         <Label
-          for="tags"
+          for="tags-input"
           class="text-xs font-medium uppercase tracking-wider text-muted-foreground"
         >
           Tags
         </Label>
-        <Input
-          id="tags"
-          v-model="tagsInput"
-          autocomplete="off"
-          placeholder="music, movies, important…"
-          class="h-11 rounded-lg bg-card/50"
-        />
-        <p class="text-xs text-muted-foreground">Comma-separated. Lowercase is fine.</p>
+        <TagsInput v-model="tagsModel" class="w-full min-h-11 rounded-lg bg-card/50 px-2.5 py-2 gap-1.5">
+          <TagsInputItem
+            v-for="(item, i) in tagsModel"
+            :key="`${i}-${item}`"
+            :value="item"
+          >
+            <TagsInputItemText />
+            <TagsInputItemDelete />
+          </TagsInputItem>
+          <TagsInputInput
+            id="tags-input"
+            placeholder="music, ideas, important…"
+            class="min-h-6"
+          />
+        </TagsInput>
+        <p class="text-xs text-muted-foreground">
+          Press Enter or comma to add a tag. Click × to remove. Saved in lowercase.
+        </p>
       </div>
 
       <div class="flex justify-end pt-2">

@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { parseEntryDoc } from "@/lib/tiptapShared";
+
 const firebaseConfigured = useFirebaseUiReady();
 const { entries } = useEntries();
 const { signedIn } = useAuth();
@@ -75,12 +77,22 @@ function formatDay(d: Date) {
             </span>
           </template>
         </div>
-        <p
-          v-if="item.contentText.trim()"
-          class="mt-3 whitespace-pre-wrap text-sm leading-relaxed"
-        >
-          {{ item.contentText.trim() }}
-        </p>
+        <div v-if="item.contentText.trim()" class="mt-3">
+          <ClientOnly>
+            <EntryBodyTiptap
+              v-if="parseEntryDoc(item.contentJson)"
+              :content-json="item.contentJson"
+            />
+            <p v-else class="whitespace-pre-wrap text-sm leading-relaxed">
+              {{ item.contentText.trim() }}
+            </p>
+            <template #fallback>
+              <p class="whitespace-pre-wrap text-sm leading-relaxed">
+                {{ item.contentText.trim() }}
+              </p>
+            </template>
+          </ClientOnly>
+        </div>
         <div v-if="item.url" class="mt-3 text-sm">
           <a
             v-if="

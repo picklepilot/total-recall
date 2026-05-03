@@ -21,6 +21,15 @@
           }
         }
       ]
+    },
+    {
+      "collectionGroup": "entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "importMeta.source", "order": "ASCENDING" },
+        { "fieldPath": "importMeta.externalId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

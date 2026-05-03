@@ -78,6 +78,7 @@ function formatDay(d: Date) {
             </span>
           </template>
         </div>
+        <EntryWidgets v-if="item.widgets?.length" :widgets="item.widgets" class="mt-2" />
         <div v-if="item.contentText.trim()" class="mt-3">
           <ClientOnly>
             <EntryBodyTiptap

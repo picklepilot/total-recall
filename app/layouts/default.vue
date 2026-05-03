@@ -62,6 +62,13 @@ async function onSignIn() {
             >
               Ask
             </NuxtLink>
+            <NuxtLink
+              to="/import"
+              class="transition-colors hover:text-foreground"
+              :class="route.path === '/import' ? 'text-foreground font-medium' : ''"
+            >
+              Import
+            </NuxtLink>
           </div>
           <ClientOnly>
             <Button

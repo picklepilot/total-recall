@@ -8,8 +8,24 @@
 const EMBEDDING_MODEL = 'gemini-embedding-001'
 const OUTPUT_DIM = 768
 const MAX_CHARS = 7500
+const EMBED_MAX_ATTEMPTS = 6
 
 export type EmbedPurpose = 'index' | 'query'
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
+
+/** Parse `Retry-After` as seconds or HTTP-date (Gemini may omit this). */
+function retryAfterMs(res: Response): number | undefined {
+  const raw = res.headers.get('retry-after')
+  if (!raw) return undefined
+  const sec = Number(raw)
+  if (!Number.isNaN(sec) && sec >= 0) return Math.min(120_000, sec * 1000)
+  const when = Date.parse(raw)
+  if (!Number.isNaN(when)) return Math.min(120_000, Math.max(0, when - Date.now()))
+  return undefined
+}
 
 function taskTypeForPurpose(purpose: EmbedPurpose): string {
   return purpose === 'index' ? 'RETRIEVAL_DOCUMENT' : 'RETRIEVAL_QUERY'
@@ -48,19 +64,32 @@ export async function embedText(
     outputDimensionality: OUTPUT_DIM,
   }
 
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  let lastStatus = 0
+  let lastErr = ''
+  for (let attempt = 0; attempt < EMBED_MAX_ATTEMPTS; attempt++) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
 
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '')
-    throw new Error(`embedContent ${res.status}: ${errText.slice(0, 400)}`)
+    if (res.ok) {
+      const data = (await res.json()) as Record<string, unknown>
+      return extractVectorValues(data)
+    }
+
+    lastStatus = res.status
+    lastErr = (await res.text().catch(() => '')).slice(0, 400)
+    const retryable = res.status === 429 || res.status === 503
+    if (retryable && attempt < EMBED_MAX_ATTEMPTS - 1) {
+      const base = retryAfterMs(res) ?? Math.min(60_000, 1000 * 2 ** attempt)
+      await sleep(base)
+      continue
+    }
+    break
   }
 
-  const data = (await res.json()) as Record<string, unknown>
-  return extractVectorValues(data)
+  throw new Error(`embedContent ${lastStatus}: ${lastErr}`)
 }
 
 /** @deprecated use `embedText(..., 'query')` */

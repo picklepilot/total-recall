@@ -2,6 +2,8 @@
 import type { LinkPreview } from '@/types/entry'
 import { parseLinkEmbed } from '@/lib/linkEmbeds'
 import LinkAttachment from '@/components/LinkAttachment.vue'
+import ComposeStarRatingField from '@/components/entry-compose/ComposeStarRatingField.vue'
+import { buildWidgetsFromComposeForm } from '@/lib/entry-compose/buildWidgetsFromForm'
 import { useDebounceFn } from '@vueuse/core'
 import {
   TagsInput,
@@ -29,6 +31,8 @@ const previewError = ref('')
 const submitting = ref(false)
 
 const editorRef = ref<{ clear: () => void } | null>(null)
+/** Optional widgets (e.g. star rating); extend compose state in `buildWidgetsFromComposeForm` when adding types. */
+const composeStarRating = ref(0)
 
 function onEditorChange(json: string, text: string) {
   contentJson.value = json
@@ -98,6 +102,7 @@ async function onSubmit() {
       url: hasUrl ? url.value.trim() : null,
       linkPreview: preview.value,
       tags: tagsModel.value.map((t) => t.trim().toLowerCase()).filter(Boolean),
+      widgets: buildWidgetsFromComposeForm({ starRating: composeStarRating.value }),
     })
     feedback.value = { type: 'ok', text: 'Saved to your log.' }
     url.value = ''
@@ -107,6 +112,7 @@ async function onSubmit() {
     editorRef.value?.clear()
     contentText.value = ''
     contentJson.value = JSON.stringify({ type: 'doc', content: [{ type: 'paragraph' }] })
+    composeStarRating.value = 0
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : 'Could not save entry.'
     feedback.value = { type: 'err', text: msg }
@@ -224,6 +230,16 @@ async function onSubmit() {
         <p class="text-xs text-muted-foreground">
           Press Enter or comma to add a tag. Click × to remove. Saved in lowercase.
         </p>
+      </div>
+
+      <div class="space-y-2">
+        <Label class="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+          Widgets (optional)
+        </Label>
+        <p class="text-xs text-muted-foreground">
+          Add a star rating when you want this entry scored (e.g. a film or album).
+        </p>
+        <ComposeStarRatingField v-model="composeStarRating" />
       </div>
 
       <div class="flex justify-end pt-2">

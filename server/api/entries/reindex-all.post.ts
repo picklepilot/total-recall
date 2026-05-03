@@ -5,6 +5,8 @@ import { applyEmbeddingToEntryDoc } from '../../utils/applyEntryEmbedding'
 const MAX_OPS = 50
 const PAGE_SIZE = 100
 const MAX_PAGES = 25
+/** Stay under Gemini free-tier embed RPM (~100/min); single-threaded reindex bursts otherwise 429. */
+const PACE_BEFORE_EMBED_MS = 700
 
 interface Body {
   force?: boolean
@@ -69,7 +71,9 @@ export default defineEventHandler(async (event) => {
       totalOps++
 
       try {
-        const r = await applyEmbeddingToEntryDoc(doc, key, uid)
+        const r = await applyEmbeddingToEntryDoc(doc, key, uid, {
+          paceBeforeEmbedMs: PACE_BEFORE_EMBED_MS,
+        })
         if (r === 'indexed') indexed++
         else if (r === 'skipped') skipped++
         else if (r === 'forbidden') failed++

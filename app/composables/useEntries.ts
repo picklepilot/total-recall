@@ -27,6 +27,7 @@ function mapDoc(id: string, data: EntryDoc): EntryView {
 
 export function useEntries() {
   const nuxtApp = useNuxtApp()
+  const { authHeaders } = useAuth()
   const user = useState<User | null>('firebase-auth-user', () => null)
   const db = computed(() => nuxtApp.$firebaseDb as Firestore | undefined)
   /** Must use reactive `user` from onAuthStateChanged — `auth.currentUser` is not Vue-reactive. */
@@ -83,7 +84,7 @@ export function useEntries() {
       throw new Error('Sign in with Google to save entries.')
     }
     const ref = collection(db.value, 'entries')
-    await addDoc(ref, {
+    const docRef = await addDoc(ref, {
       userId: user.value.uid,
       contentJson: payload.contentJson,
       contentText: payload.contentText,
@@ -92,6 +93,17 @@ export function useEntries() {
       tags: payload.tags,
       createdAt: serverTimestamp(),
     })
+
+    try {
+      const headers = await authHeaders()
+      await $fetch('/api/entries/index', {
+        method: 'POST',
+        body: { entryId: docRef.id },
+        headers,
+      })
+    } catch (e) {
+      console.warn('[total-recall] embedding index failed (entry still saved):', e)
+    }
   }
 
   return { entries, ready, addEntry }

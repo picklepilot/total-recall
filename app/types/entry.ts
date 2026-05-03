@@ -16,6 +16,9 @@ export interface EntryDoc {
   linkPreview: LinkPreview | null
   tags: string[]
   createdAt: Timestamp
+  /** Set by server (`/api/entries/index`) for Firestore vector search — not writable by clients. */
+  embedModel?: string
+  embeddedAt?: Timestamp
 }
 
 export interface EntryView extends Omit<EntryDoc, 'createdAt'> {

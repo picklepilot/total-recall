@@ -7,7 +7,8 @@ interface ChatMessage {
 
 interface ChatBody {
   messages: ChatMessage[]
-  memoryContext: string
+  /** @deprecated Ignored — context is built server-side (vector search + fallback). */
+  memoryContext?: string
 }
 
 function extractTextFromGeminiChunk(raw: unknown): string {
@@ -29,7 +30,7 @@ function deltaFromChunk(accumulated: string, t: string): { delta: string; next: 
 }
 
 export default defineEventHandler(async (event) => {
-  await requireVerifiedUser(event)
+  const user = await requireVerifiedUser(event)
 
   const config = useRuntimeConfig(event)
   const key = config.geminiApiKey
@@ -42,6 +43,15 @@ export default defineEventHandler(async (event) => {
   const encoder = new TextEncoder()
   const lastUser = [...body.messages].reverse().find((m) => m.role === 'user')
   const question = lastUser?.content ?? ''
+
+  let memoryContext = ''
+  if (key && question.trim()) {
+    try {
+      memoryContext = await buildMemoryContextForQuestion(user.uid, question, key)
+    } catch (e) {
+      console.warn('[total-recall] memory retrieval failed:', e)
+    }
+  }
 
   const sendSse = (obj: Record<string, unknown>) =>
     encoder.encode(`data: ${JSON.stringify(obj)}\n\n`)
@@ -65,7 +75,7 @@ export default defineEventHandler(async (event) => {
     return new Response(stream)
   }
 
-  const system = buildLogChatSystemPrompt(body.memoryContext ?? '')
+  const system = buildLogChatSystemPrompt(memoryContext)
   const geminiUrl = new URL(
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent',
   )

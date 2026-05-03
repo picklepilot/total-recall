@@ -7,12 +7,12 @@ interface ChatMessage {
 
 interface ChatBody {
   messages: ChatMessage[]
-  /** Serialized memory log — server does not read Firestore directly */
-  memoryContext: string
+  /** @deprecated Context is built server-side from Firestore (vector search + fallback). */
+  memoryContext?: string
 }
 
 export default defineEventHandler(async (event) => {
-  await requireVerifiedUser(event)
+  const user = await requireVerifiedUser(event)
 
   const config = useRuntimeConfig(event)
   const key = config.geminiApiKey
@@ -30,10 +30,11 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const system = buildLogChatSystemPrompt(body.memoryContext ?? '')
-
   const lastUser = [...body.messages].reverse().find((m) => m.role === 'user')
   const question = lastUser?.content ?? ''
+
+  const memoryContext = await buildMemoryContextForQuestion(user.uid, question, key)
+  const system = buildLogChatSystemPrompt(memoryContext)
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(key)}`
 

@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { entriesToMemoryContext } from "@/utils/memoryContext";
-import { ArrowUp, Loader2, Sparkles } from "lucide-vue-next";
+import { ArrowUp, Loader2 } from "lucide-vue-next";
 
 useHead({
   title: "Ask your log — Total Recall",
@@ -14,6 +13,56 @@ const { signedIn, authHeaders } = useAuth();
 const prompt = ref("");
 const sessionStarted = ref(false);
 const streaming = ref(false);
+
+const reindexing = ref(false);
+const reindexStatus = ref("");
+const forceReindex = ref(false);
+
+async function runReindexAll() {
+  if (!signedIn.value || reindexing.value) return;
+  reindexing.value = true;
+  reindexStatus.value = "";
+  let totalIndexed = 0;
+  let totalSkipped = 0;
+  let totalFailed = 0;
+  let lastFirstError = "";
+  let rounds = 0;
+  try {
+    const headers = await authHeaders();
+    while (rounds < 80) {
+      rounds++;
+      const res = await $fetch<{
+        indexed: number;
+        skipped: number;
+        failed: number;
+        hasMore: boolean;
+        firstError?: string;
+      }>("/api/entries/reindex-all", {
+        method: "POST",
+        headers: { ...headers, "Content-Type": "application/json" },
+        body: { force: forceReindex.value },
+      });
+      totalIndexed += res.indexed;
+      totalSkipped += res.skipped;
+      totalFailed += res.failed;
+      if (res.firstError) lastFirstError = res.firstError;
+      reindexStatus.value = `Indexed ${totalIndexed}… (${totalSkipped} skipped, ${totalFailed} failed this run)`;
+      if (!res.hasMore) break;
+    }
+    const errTail =
+      totalFailed > 0 && lastFirstError
+        ? ` ${lastFirstError}`
+        : totalFailed > 0
+          ? " Enable “Overwrite existing vectors” if old embeddings used a different model/dimension."
+          : "";
+    reindexStatus.value = `Done. Indexed ${totalIndexed} entr${totalIndexed === 1 ? "y" : "ies"} (${totalSkipped} skipped, ${totalFailed} failed).${errTail}`;
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : "Reindex failed.";
+    reindexStatus.value = msg;
+  } finally {
+    reindexing.value = false;
+  }
+}
 const sawFirstChunk = ref(false);
 const reply = ref("");
 const streamError = ref("");
@@ -44,7 +93,6 @@ async function runStream() {
   responseRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   try {
-    const memoryContext = entriesToMemoryContext(entries.value);
     const headers = await authHeaders();
     const res = await fetch("/api/chat-stream", {
       method: "POST",
@@ -54,7 +102,6 @@ async function runStream() {
       },
       body: JSON.stringify({
         messages: [{ role: "user" as const, content: text }],
-        memoryContext,
       }),
     });
 
@@ -159,8 +206,8 @@ watch(
         <p
           class="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground"
         >
-          Questions use your timeline entries as context. Sign in is required;
-          answers stream in as they are generated.
+          Questions retrieve the most relevant entries (Firestore vector search),
+          then stream an answer. Sign in is required.
         </p>
       </header>
 
@@ -229,6 +276,42 @@ watch(
           </div>
         </div>
       </div>
+    </div>
+
+    <div
+      v-if="signedIn && firebaseConfigured && ready && entries.length"
+      class="mx-auto mt-8 max-w-2xl rounded-xl border border-border/60 bg-muted/15 px-4 py-4 sm:px-5"
+    >
+      <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+        Vector search
+      </p>
+      <p class="mt-1 text-sm text-muted-foreground">
+        Backfill or refresh embeddings for Firestore vector search (uses your Gemini key).
+      </p>
+      <label class="mt-3 flex cursor-pointer items-center gap-2 text-sm text-foreground">
+        <input
+          v-model="forceReindex"
+          type="checkbox"
+          class="size-4 rounded border-border accent-primary"
+        />
+        Overwrite existing vectors
+      </label>
+      <div class="mt-4 flex flex-wrap items-center gap-3">
+        <Button
+          type="button"
+          variant="secondary"
+          size="sm"
+          class="rounded-lg"
+          :disabled="reindexing || streaming"
+          @click="runReindexAll"
+        >
+          <Loader2 v-if="reindexing" class="mr-2 size-4 animate-spin" />
+          {{ reindexing ? "Reindexing…" : "Reindex all" }}
+        </Button>
+      </div>
+      <p v-if="reindexStatus" class="mt-3 text-xs text-muted-foreground">
+        {{ reindexStatus }}
+      </p>
     </div>
 
     <Card

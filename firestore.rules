@@ -8,8 +8,12 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.keys().hasAll([
           'userId', 'contentJson', 'contentText', 'url', 'linkPreview', 'tags', 'createdAt'
-        ]);
-      allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+        ])
+        && !request.resource.data.keys().hasAny(['embedding']);
+      // Clients cannot change server-managed vector field; Admin SDK bypasses these rules.
+      allow update: if request.auth != null && request.auth.uid == resource.data.userId
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['embedding']);
+      allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
     }
   }
 }

@@ -1,5 +1,9 @@
 <script setup lang="ts">
 import { ArrowUp, Loader2 } from "lucide-vue-next";
+import {
+  isChatUiTableBlock,
+  type ChatUiTableBlock,
+} from "~~/shared/types/chat-ui";
 
 useHead({
   title: "Ask your log — Total Recall",
@@ -65,6 +69,7 @@ async function runReindexAll() {
 }
 const sawFirstChunk = ref(false);
 const reply = ref("");
+const uiTables = ref<ChatUiTableBlock[]>([]);
 const streamError = ref("");
 const responseRef = ref<HTMLElement | null>(null);
 const isTextareaFocused = ref(false);
@@ -85,6 +90,7 @@ async function runStream() {
 
   streamError.value = "";
   reply.value = "";
+  uiTables.value = [];
   sawFirstChunk.value = false;
   streaming.value = true;
   sessionStarted.value = true;
@@ -135,7 +141,15 @@ async function runStream() {
       if (!dataLine) return;
       const jsonStr = dataLine.replace(/^data:\s?/, "").trim();
       try {
-        const evt = JSON.parse(jsonStr) as { t?: string; done?: boolean };
+        const evt = JSON.parse(jsonStr) as {
+          t?: string;
+          done?: boolean;
+          ui?: unknown;
+        };
+        if (evt.ui !== undefined && isChatUiTableBlock(evt.ui)) {
+          uiTables.value.push(evt.ui);
+          sawFirstChunk.value = true;
+        }
         if (evt.t) {
           reply.value += evt.t;
           sawFirstChunk.value = true;
@@ -160,6 +174,7 @@ async function runStream() {
   } catch (e: unknown) {
     const msg = e instanceof Error ? e.message : "Something went wrong.";
     streamError.value = msg;
+    uiTables.value = [];
     reply.value =
       "Could not complete the answer. Check NUXT_GEMINI_API_KEY and your connection, then try again.";
   } finally {
@@ -393,7 +408,7 @@ watch(
       </div>
 
       <div
-        v-else-if="reply || streamError"
+        v-else-if="reply || streamError || uiTables.length"
         class="rounded-2xl border border-border/70 bg-card/50 px-5 py-6 shadow-sm sm:px-7 sm:py-8"
       >
         <p
@@ -401,9 +416,17 @@ watch(
         >
           Answer
         </p>
+        <div v-if="uiTables.length" class="mt-4 space-y-2">
+          <ChatUiTable
+            v-for="(block, ti) in uiTables"
+            :key="'ui-' + ti"
+            :block="block"
+          />
+        </div>
         <div
-          v-if="streaming && reply"
+          v-if="streaming && sawFirstChunk"
           class="mt-4 text-[15px] leading-[1.7] text-foreground whitespace-pre-wrap"
+          :class="uiTables.length ? 'pt-2' : ''"
         >
           {{ reply
           }}<span
@@ -412,8 +435,9 @@ watch(
           />
         </div>
         <div
-          v-else-if="reply && !streaming"
+          v-else-if="!streaming && reply.trim()"
           class="mt-4 space-y-4 text-[15px] leading-[1.7] text-foreground"
+          :class="uiTables.length ? 'pt-2' : ''"
         >
           <p
             v-for="(para, i) in formattedParagraphs"

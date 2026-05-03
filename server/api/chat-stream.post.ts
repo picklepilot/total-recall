@@ -1,4 +1,4 @@
-import { buildLogChatSystemPrompt } from '../utils/logChatPrompt'
+import { runGeminiLogChatWithTools } from '../utils/geminiLogChatWithTools'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -9,24 +9,6 @@ interface ChatBody {
   messages: ChatMessage[]
   /** @deprecated Ignored — context is built server-side (vector search + fallback). */
   memoryContext?: string
-}
-
-function extractTextFromGeminiChunk(raw: unknown): string {
-  const data = raw as {
-    candidates?: { content?: { parts?: { text?: string }[] } }[]
-  }
-  const parts = data.candidates?.[0]?.content?.parts
-  if (!parts?.length) return ''
-  return parts.map((p) => p.text ?? '').join('')
-}
-
-/** Emit only new text whether the API sends cumulative or delta chunks. */
-function deltaFromChunk(accumulated: string, t: string): { delta: string; next: string } {
-  if (!t) return { delta: '', next: accumulated }
-  if (accumulated && t.startsWith(accumulated)) {
-    return { delta: t.slice(accumulated.length), next: t }
-  }
-  return { delta: t, next: accumulated + t }
 }
 
 export default defineEventHandler(async (event) => {
@@ -75,86 +57,20 @@ export default defineEventHandler(async (event) => {
     return new Response(stream)
   }
 
-  const system = buildLogChatSystemPrompt(memoryContext)
-  const geminiUrl = new URL(
-    'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:streamGenerateContent',
-  )
-  geminiUrl.searchParams.set('alt', 'sse')
-  geminiUrl.searchParams.set('key', key)
-
-  const geminiRes = await fetch(geminiUrl.toString(), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
-    body: JSON.stringify({
-      contents: [
-        {
-          role: 'user',
-          parts: [{ text: `${system}\n\n---\n\nQuestion: ${question}` }],
-        },
-      ],
-    }),
-  })
-
-  if (!geminiRes.ok) {
-    const errText = await geminiRes.text().catch(() => '')
-    throw createError({
-      statusCode: 502,
-      statusMessage: `Gemini error: ${geminiRes.status} ${errText.slice(0, 200)}`,
-    })
-  }
-
-  if (!geminiRes.body) {
-    throw createError({ statusCode: 502, statusMessage: 'Empty stream from Gemini' })
-  }
-
-  const decoder = new TextDecoder()
-  let lineBuffer = ''
-  let textAccumulated = ''
-
-  function parseGeminiSseLine(trimmed: string): string {
-    if (trimmed.startsWith('data:')) return trimmed.slice(5).trim()
-    if (trimmed.startsWith('{')) return trimmed
-    return ''
-  }
-
-  function processPayload(payload: string, controller: ReadableStreamDefaultController<Uint8Array>) {
-    if (!payload || payload === '[DONE]') return
-    try {
-      const json = JSON.parse(payload)
-      const chunkText = extractTextFromGeminiChunk(json)
-      if (!chunkText) return
-      const { delta, next } = deltaFromChunk(textAccumulated, chunkText)
-      textAccumulated = next
-      if (delta) controller.enqueue(sendSse({ t: delta }))
-    } catch {
-      /* ignore malformed JSON */
-    }
-  }
-
   const outStream = new ReadableStream({
     async start(controller) {
-      const reader = geminiRes.body!.getReader()
       try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          lineBuffer += decoder.decode(value, { stream: true })
-          const lines = lineBuffer.split('\n')
-          lineBuffer = lines.pop() ?? ''
-          for (const line of lines) {
-            const trimmed = line.trim()
-            if (!trimmed) continue
-            const payload = parseGeminiSseLine(trimmed)
-            if (payload) processPayload(payload, controller)
-          }
-        }
-        lineBuffer += decoder.decode()
-        for (const line of lineBuffer.split('\n')) {
-          const trimmed = line.trim()
-          if (!trimmed) continue
-          const payload = parseGeminiSseLine(trimmed)
-          if (payload) processPayload(payload, controller)
-        }
+        await runGeminiLogChatWithTools({
+          apiKey: key,
+          question,
+          memoryContext,
+          enqueue: (obj) => controller.enqueue(sendSse(obj)),
+        })
+      } catch (e) {
+        console.warn('[total-recall] chat-stream:', e)
+        const msg =
+          e instanceof Error ? e.message : 'Could not complete the answer. Try again in a moment.'
+        controller.enqueue(sendSse({ t: msg }))
       } finally {
         controller.enqueue(sendSse({ done: true }))
         controller.close()

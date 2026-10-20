@@ -1,18 +1,23 @@
 <script setup lang="ts">
-import { parseEntryDoc } from "@/lib/tiptapShared";
-import LinkAttachment from "@/components/LinkAttachment.vue";
+import { parseEntryDoc } from '@/lib/tiptapShared'
+import { partitionEntryWidgets } from '@/lib/entry-widgets/partitionWidgets'
+import type { EntryView } from '@/types/entry'
 
-const firebaseConfigured = useFirebaseUiReady();
-const { entries } = useEntries();
-const { signedIn } = useAuth();
+const firebaseConfigured = useFirebaseUiReady()
+const { entries } = useEntries()
+const { signedIn } = useAuth()
 
 function formatDay(d: Date) {
   return d.toLocaleDateString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
+}
+
+function splitTimelineWidgets(entry: EntryView) {
+  return partitionEntryWidgets(entry.widgets)
 }
 </script>
 
@@ -78,7 +83,11 @@ function formatDay(d: Date) {
             </span>
           </template>
         </div>
-        <EntryWidgets v-if="item.widgets?.length" :widgets="item.widgets" class="mt-2" />
+        <EntryWidgets
+          v-if="splitTimelineWidgets(item).withoutLink.length"
+          :widgets="splitTimelineWidgets(item).withoutLink"
+          class="mt-2"
+        />
         <div v-if="item.contentText.trim()" class="mt-3">
           <ClientOnly>
             <EntryBodyTiptap
@@ -95,9 +104,11 @@ function formatDay(d: Date) {
             </template>
           </ClientOnly>
         </div>
-        <div v-if="item.url" class="mt-3 text-sm">
-          <LinkAttachment :url="item.url" :link-preview="item.linkPreview" />
-        </div>
+        <EntryWidgets
+          v-if="splitTimelineWidgets(item).linksOnly.length"
+          :widgets="splitTimelineWidgets(item).linksOnly"
+          class="mt-3 text-sm"
+        />
       </article>
     </div>
 

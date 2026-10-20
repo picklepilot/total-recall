@@ -10,11 +10,8 @@ export function buildEmbedSource(data: Record<string, unknown>): string {
   const tags = (Array.isArray(data.tags) ? data.tags : []) as string[]
   const parts = [
     tags.join(' '),
-    formatEntryWidgetsPlain(data.widgets),
+    formatEntryWidgetsPlain(data.widgets, data.url, data.linkPreview),
     String(data.contentText ?? ''),
-    String(data.url ?? ''),
-    (data.linkPreview as { title?: string; description?: string } | null)?.title ?? '',
-    (data.linkPreview as { title?: string; description?: string } | null)?.description ?? '',
   ]
   return parts.filter(Boolean).join('\n').trim().slice(0, 7500)
 }

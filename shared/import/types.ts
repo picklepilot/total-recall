@@ -1,11 +1,9 @@
-import type { EntryWidget, EntryWidgetType, ImportMeta, LinkPreview } from '../../app/types/entry'
+import type { EntryWidget, EntryWidgetType, ImportMeta } from '../../app/types/entry'
 
 /** Normalized row all file/API adapters must produce before persistence. */
 export interface EntryImportDraft {
   contentText: string
   contentJson: string
-  url: string | null
-  linkPreview: LinkPreview | null
   tags: string[]
   /** Diary/logical time for the entry (Firestore `createdAt`). */
   createdAt: Date

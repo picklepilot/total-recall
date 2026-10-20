@@ -14,19 +14,26 @@ import {
 import type { User } from 'firebase/auth'
 import type { EntryDoc, EntryView, EntryWidget, ImportMeta, LinkPreview } from '@/types/entry'
 import type { EntryImportDraft } from '~~/shared/import/types'
+import { coalesceEntryWidgetsWithLegacyLink } from '~~/shared/entryWidgetsNormalize'
 
-function mapDoc(id: string, data: EntryDoc): EntryView {
+/** Firestore rows may include legacy `url` / `linkPreview` before link widgets. */
+type EntrySnapshot = EntryDoc & { url?: string | null; linkPreview?: LinkPreview | null }
+
+function mapDoc(id: string, data: EntrySnapshot): EntryView {
   const created = data.createdAt?.toDate?.() ?? new Date()
+  const merged = coalesceEntryWidgetsWithLegacyLink(
+    data.widgets,
+    data.url,
+    data.linkPreview,
+  )
   return {
     id,
     userId: data.userId,
     contentJson: data.contentJson,
     contentText: data.contentText,
-    url: data.url,
-    linkPreview: data.linkPreview,
     tags: data.tags ?? [],
     createdAt: created,
-    widgets: data.widgets,
+    widgets: merged.length ? merged : undefined,
     importMeta: data.importMeta,
   }
 }
@@ -63,7 +70,7 @@ export function useEntries() {
     unsub = onSnapshot(q, (snap) => {
       const list: EntryView[] = []
       snap.forEach((doc) => {
-        const d = doc.data() as EntryDoc
+        const d = doc.data() as EntrySnapshot
         if (d.userId === uid) list.push(mapDoc(doc.id, d))
       })
       entries.value = list
@@ -104,8 +111,6 @@ export function useEntries() {
   async function addEntry(payload: {
     contentJson: string
     contentText: string
-    url: string | null
-    linkPreview: LinkPreview | null
     tags: string[]
     widgets?: EntryWidget[]
   }) {
@@ -117,8 +122,6 @@ export function useEntries() {
       userId: user.value.uid,
       contentJson: payload.contentJson,
       contentText: payload.contentText,
-      url: payload.url,
-      linkPreview: payload.linkPreview,
       tags: payload.tags,
       ...(payload.widgets?.length ? { widgets: payload.widgets } : {}),
       createdAt: serverTimestamp(),
@@ -143,8 +146,6 @@ export function useEntries() {
   async function addImportedEntry(payload: {
     contentJson: string
     contentText: string
-    url: string | null
-    linkPreview: LinkPreview | null
     tags: string[]
     createdAt: Date
     widgets?: EntryWidget[]
@@ -158,8 +159,6 @@ export function useEntries() {
       userId: user.value.uid,
       contentJson: payload.contentJson,
       contentText: payload.contentText,
-      url: payload.url,
-      linkPreview: payload.linkPreview,
       tags: payload.tags,
       createdAt: Timestamp.fromDate(payload.createdAt),
       ...(payload.widgets?.length ? { widgets: payload.widgets } : {}),
@@ -205,8 +204,6 @@ export function useEntries() {
           await addImportedEntry({
             contentJson: d.contentJson,
             contentText: d.contentText,
-            url: d.url,
-            linkPreview: d.linkPreview,
             tags: d.tags,
             createdAt: d.createdAt,
             widgets: d.widgets,

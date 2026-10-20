@@ -54,7 +54,10 @@ describe("parseLetterboxdDiaryCsv", () => {
     expect(drafts).toHaveLength(3);
 
     const first = drafts[0]!;
-    expect(first.url).toBe("https://boxd.it/1yQw4R");
+    const linkW = first.widgets?.find((w) => w.type === "link");
+    expect(linkW && linkW.type === "link" && linkW.url).toBe(
+      "https://boxd.it/1yQw4R",
+    );
     expect(first.importMeta?.source).toBe(LETTERBOXD_DIARY_SOURCE);
     expect(first.importMeta?.externalId).toBe(
       "https://boxd.it/1yQw4R|2021-01-04",

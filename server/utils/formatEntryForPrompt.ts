@@ -12,15 +12,11 @@ export function formatEntryDocForPrompt(id: string, data: Record<string, unknown
   const createdAt = toDate(data.createdAt as { toDate?: () => Date } | undefined)
   const date = createdAt.toISOString().slice(0, 10)
   const tags = (Array.isArray(data.tags) ? data.tags : []) as string[]
-  const url = (data.url as string | null) ?? null
-  const linkPreview = data.linkPreview as { title?: string | null } | null
   const contentText = String(data.contentText ?? '').trim()
-  const widgetsLine = formatEntryWidgetsPlain(data.widgets)
+  const widgetsLine = formatEntryWidgetsPlain(data.widgets, data.url, data.linkPreview)
 
   const parts: string[] = [`[${date}]`, `id: ${id}`]
   if (tags.length) parts.push(`tags: ${tags.join(', ')}`)
-  if (url) parts.push(`url: ${url}`)
-  if (linkPreview?.title) parts.push(`link_title: ${linkPreview.title}`)
   if (widgetsLine) parts.push(`widgets: ${widgetsLine}`)
   if (contentText) parts.push(`note: ${contentText}`)
   else parts.push('note: (empty)')

@@ -94,17 +94,18 @@ function buildDraft(row: Record<string, string>): EntryImportDraft {
   const contentText = lines.join("\n");
   const tagPieces = [...parseTagsCell(tagsCell), "letterboxd", "diary"];
 
+  const linkWidget: EntryWidget = { type: "link", url: uri, preview: null };
   const ratingWidget = letterboxdRatingToStarWidget(rating);
-  const widgets = ratingWidget ? [ratingWidget] : undefined;
+  const widgets: EntryWidget[] = ratingWidget
+    ? [linkWidget, ratingWidget]
+    : [linkWidget];
 
   return {
     contentText,
     contentJson: plainTextToTipTapDoc(contentText),
-    url: uri,
-    linkPreview: null,
     tags: tagsFromStrings(tagPieces),
     createdAt: utcMidnightFromYmd(date),
-    ...(widgets ? { widgets } : {}),
+    widgets,
     importMeta: {
       source: LETTERBOXD_DIARY_SOURCE,
       externalId: `${uri}|${date}`,

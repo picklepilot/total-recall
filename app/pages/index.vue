@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import type { LinkPreview } from '@/types/entry'
-import { parseLinkEmbed } from '@/lib/linkEmbeds'
-import LinkAttachment from '@/components/LinkAttachment.vue'
 import ComposeStarRatingField from '@/components/entry-compose/ComposeStarRatingField.vue'
+import ComposeLinkField from '@/components/entry-compose/ComposeLinkField.vue'
+import ComposeWidgetPickerGrid from '@/components/entry-compose/ComposeWidgetPickerGrid.vue'
 import { buildWidgetsFromComposeForm } from '@/lib/entry-compose/buildWidgetsFromForm'
-import { useDebounceFn } from '@vueuse/core'
 import {
   TagsInput,
   TagsInputInput,
@@ -15,23 +14,24 @@ import {
 
 const nuxtApp = useNuxtApp()
 const { ready, addEntry } = useEntries()
-const { signedIn, authHeaders } = useAuth()
+const { signedIn } = useAuth()
 
 const firebaseConfigured = useFirebaseUiReady()
 
 const feedback = ref<{ type: 'ok' | 'err'; text: string } | null>(null)
 
-const url = ref('')
+/** Panels only after user picks a tile — keeps the first screen light on mobile. */
+const composeLinkPanel = ref(false)
+const composeStarPanel = ref(false)
+
+const composeLinkUrl = ref('')
+const composeLinkPreview = ref<LinkPreview | null>(null)
 const tagsModel = ref<string[]>([])
 const contentJson = ref(JSON.stringify({ type: 'doc', content: [{ type: 'paragraph' }] }))
 const contentText = ref('')
-const preview = ref<LinkPreview | null>(null)
-const previewLoading = ref(false)
-const previewError = ref('')
 const submitting = ref(false)
 
 const editorRef = ref<{ clear: () => void } | null>(null)
-/** Optional widgets (e.g. star rating); extend compose state in `buildWidgetsFromComposeForm` when adding types. */
 const composeStarRating = ref(0)
 
 function onEditorChange(json: string, text: string) {
@@ -39,41 +39,33 @@ function onEditorChange(json: string, text: string) {
   contentText.value = text
 }
 
-const fetchPreview = useDebounceFn(async () => {
-  preview.value = null
-  previewError.value = ''
-  const u = url.value.trim()
-  if (!u) return
-  if (!signedIn.value) return
-  previewLoading.value = true
-  try {
-    const headers = await authHeaders()
-    preview.value = await $fetch<LinkPreview>('/api/link-preview', {
-      params: { url: u },
-      headers,
-    })
-  } catch (e: unknown) {
-    const err = e as { data?: { statusMessage?: string }; message?: string }
-    previewError.value =
-      err?.data?.statusMessage || err?.message || 'Could not load a preview for this URL.'
-  } finally {
-    previewLoading.value = false
+const linkTrimmed = computed(() => composeLinkUrl.value.trim())
+
+function toggleLinkPanel() {
+  composeLinkPanel.value = !composeLinkPanel.value
+  if (!composeLinkPanel.value) {
+    composeLinkUrl.value = ''
+    composeLinkPreview.value = null
   }
-}, 420)
+}
 
-watch(url, () => {
-  void fetchPreview()
-})
+function toggleStarPanel() {
+  composeStarPanel.value = !composeStarPanel.value
+  if (!composeStarPanel.value) {
+    composeStarRating.value = 0
+  }
+}
 
-const urlTrimmed = computed(() => url.value.trim())
+function removeLinkPanel() {
+  composeLinkPanel.value = false
+  composeLinkUrl.value = ''
+  composeLinkPreview.value = null
+}
 
-const showLinkAttachment = computed(() => {
-  const u = urlTrimmed.value
-  if (!u) return false
-  if (parseLinkEmbed(u)) return true
-  if (previewLoading.value) return false
-  return Boolean(preview.value)
-})
+function removeStarPanel() {
+  composeStarPanel.value = false
+  composeStarRating.value = 0
+}
 
 async function onSubmit() {
   feedback.value = null
@@ -89,7 +81,7 @@ async function onSubmit() {
     return
   }
   const hasNote = contentText.value.trim().length > 0
-  const hasUrl = url.value.trim().length > 0
+  const hasUrl = linkTrimmed.value.length > 0
   if (!hasNote && !hasUrl) {
     feedback.value = { type: 'err', text: 'Add a note, a link, or both.' }
     return
@@ -99,16 +91,20 @@ async function onSubmit() {
     await addEntry({
       contentJson: contentJson.value,
       contentText: contentText.value,
-      url: hasUrl ? url.value.trim() : null,
-      linkPreview: preview.value,
       tags: tagsModel.value.map((t) => t.trim().toLowerCase()).filter(Boolean),
-      widgets: buildWidgetsFromComposeForm({ starRating: composeStarRating.value }),
+      widgets: buildWidgetsFromComposeForm({
+        starRating: composeStarRating.value,
+        link: hasUrl
+          ? { url: composeLinkUrl.value.trim(), preview: composeLinkPreview.value }
+          : null,
+      }),
     })
     feedback.value = { type: 'ok', text: 'Saved to your log.' }
-    url.value = ''
+    composeLinkUrl.value = ''
+    composeLinkPreview.value = null
+    composeLinkPanel.value = false
+    composeStarPanel.value = false
     tagsModel.value = []
-    preview.value = null
-    previewError.value = ''
     editorRef.value?.clear()
     contentText.value = ''
     contentJson.value = JSON.stringify({ type: 'doc', content: [{ type: 'paragraph' }] })
@@ -123,11 +119,11 @@ async function onSubmit() {
 </script>
 
 <template>
-  <div class="space-y-10">
+  <div class="space-y-8 sm:space-y-10">
     <div class="space-y-2">
       <h1 class="text-2xl font-semibold tracking-tight">New entry</h1>
       <p class="text-sm text-muted-foreground leading-relaxed">
-        Capture a link, a thought, or both. Everything stays in your Firebase project.
+        Jot the thought first. Add a link or rating only if you need them.
       </p>
     </div>
 
@@ -166,29 +162,7 @@ async function onSubmit() {
       </CardHeader>
     </Card>
 
-    <form class="space-y-8" @submit.prevent="onSubmit">
-      <div class="space-y-2">
-        <Label for="url" class="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Link (optional)
-        </Label>
-        <Input
-          id="url"
-          v-model="url"
-          type="url"
-          autocomplete="off"
-          placeholder="https://…"
-          class="h-11 rounded-lg bg-card/50"
-        />
-        <p v-if="previewLoading" class="text-xs text-muted-foreground">Fetching preview…</p>
-        <p v-else-if="previewError" class="text-xs text-destructive">{{ previewError }}</p>
-      </div>
-
-      <LinkAttachment
-        v-if="showLinkAttachment"
-        :url="urlTrimmed"
-        :link-preview="preview"
-      />
-
+    <form v-else class="space-y-8" @submit.prevent="onSubmit">
       <div class="space-y-2">
         <Label class="text-xs font-medium uppercase tracking-wider text-muted-foreground">
           Note
@@ -197,7 +171,7 @@ async function onSubmit() {
           <MediumEditor ref="editorRef" @change="onEditorChange" />
           <template #fallback>
             <div
-              class="flex min-h-[220px] items-center justify-center rounded-xl border border-dashed border-border text-sm text-muted-foreground"
+              class="flex min-h-[200px] items-center justify-center rounded-2xl border border-dashed border-border text-sm text-muted-foreground sm:min-h-[220px]"
             >
               Loading editor…
             </div>
@@ -212,7 +186,7 @@ async function onSubmit() {
         >
           Tags
         </Label>
-        <TagsInput v-model="tagsModel" class="w-full min-h-11 rounded-lg bg-card/50 px-2.5 py-2 gap-1.5">
+        <TagsInput v-model="tagsModel" class="w-full min-h-11 rounded-xl bg-card/50 px-2.5 py-2 gap-1.5">
           <TagsInputItem
             v-for="(item, i) in tagsModel"
             :key="`${i}-${item}`"
@@ -223,30 +197,74 @@ async function onSubmit() {
           </TagsInputItem>
           <TagsInputInput
             id="tags-input"
-            placeholder="music, ideas, important…"
+            placeholder="Optional — tap below for more"
             class="min-h-6"
           />
         </TagsInput>
-        <p class="text-xs text-muted-foreground">
-          Press Enter or comma to add a tag. Click × to remove. Saved in lowercase.
-        </p>
       </div>
 
-      <div class="space-y-2">
-        <Label class="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-          Widgets (optional)
-        </Label>
-        <p class="text-xs text-muted-foreground">
-          Add a star rating when you want this entry scored (e.g. a film or album).
-        </p>
+      <div class="space-y-3">
+        <div class="flex items-end justify-between gap-3">
+          <div class="space-y-1">
+            <p class="text-xs font-medium uppercase tracking-wider text-muted-foreground">
+              Add more
+            </p>
+            <p class="text-sm text-muted-foreground leading-snug">
+              Tap a square to show that field. Tap again on the square to hide it.
+            </p>
+          </div>
+        </div>
+        <ComposeWidgetPickerGrid
+          :link-active="composeLinkPanel"
+          :star-active="composeStarPanel"
+          @toggle-link="toggleLinkPanel"
+          @toggle-star="toggleStarPanel"
+        />
+      </div>
+
+      <div
+        v-if="composeLinkPanel"
+        class="space-y-3 rounded-2xl border border-border/80 bg-card/40 p-4"
+      >
+        <div class="flex items-start justify-between gap-2">
+          <p class="text-sm font-medium text-foreground">Link</p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="shrink-0 touch-manipulation text-muted-foreground hover:text-foreground"
+            @click="removeLinkPanel"
+          >
+            Remove
+          </Button>
+        </div>
+        <ComposeLinkField v-model:url="composeLinkUrl" v-model:preview="composeLinkPreview" :show-label="false" />
+      </div>
+
+      <div
+        v-if="composeStarPanel"
+        class="space-y-3 rounded-2xl border border-border/80 bg-card/40 p-4"
+      >
+        <div class="flex items-start justify-between gap-2">
+          <p class="text-sm font-medium text-foreground">Rating</p>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            class="shrink-0 touch-manipulation text-muted-foreground hover:text-foreground"
+            @click="removeStarPanel"
+          >
+            Remove
+          </Button>
+        </div>
         <ComposeStarRatingField v-model="composeStarRating" />
       </div>
 
-      <div class="flex justify-end pt-2">
+      <div class="pt-1">
         <Button
           type="submit"
           size="lg"
-          class="rounded-full px-8"
+          class="h-12 w-full touch-manipulation rounded-full text-base sm:ms-auto sm:w-auto sm:min-w-[11rem]"
           :disabled="submitting || !ready"
         >
           {{ submitting ? 'Saving…' : 'Save entry' }}

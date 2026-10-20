@@ -1,8 +1,15 @@
-import type { EntryWidget } from '@/types/entry'
+import type { EntryWidget, LinkPreview } from '@/types/entry'
 
-/** Maps optional compose-time fields into `EntryWidget[]` for `addEntry`. Extend when new widget types get form controls. */
-export function buildWidgetsFromComposeForm(state: { starRating: number }): EntryWidget[] | undefined {
+/** Maps optional compose-time fields into `EntryWidget[]` for `addEntry`. */
+export function buildWidgetsFromComposeForm(state: {
+  starRating: number
+  link: { url: string; preview: LinkPreview | null } | null
+}): EntryWidget[] | undefined {
   const out: EntryWidget[] = []
+  const u = state.link?.url?.trim()
+  if (u) {
+    out.push({ type: 'link', url: u, preview: state.link?.preview ?? null })
+  }
   if (state.starRating > 0) {
     out.push({ type: 'starRating', value: state.starRating })
   }

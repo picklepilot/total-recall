@@ -20,8 +20,15 @@ export interface StarRatingWidget {
   value: number
 }
 
+/** Canonical URL for the entry; `preview` from `/api/link-preview` when available. */
+export interface LinkWidget {
+  type: 'link'
+  url: string
+  preview: LinkPreview | null
+}
+
 /** Add union members here; register a Vue view in `app/lib/entry-widgets/registry.ts`. */
-export type EntryWidget = StarRatingWidget
+export type EntryWidget = StarRatingWidget | LinkWidget
 
 export type EntryWidgetType = EntryWidget['type']
 
@@ -29,11 +36,9 @@ export interface EntryDoc {
   userId: string
   contentJson: string
   contentText: string
-  url: string | null
-  linkPreview: LinkPreview | null
   tags: string[]
   createdAt: Timestamp
-  /** Optional structured fields (ratings, etc.). */
+  /** Structured fields (link, ratings, etc.). */
   widgets?: EntryWidget[]
   importMeta?: ImportMeta
   /** Set by server (`/api/entries/index`) for Firestore vector search — not writable by clients. */

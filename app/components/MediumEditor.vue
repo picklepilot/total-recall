@@ -45,7 +45,7 @@ const editor = useEditor({
   editorProps: {
     attributes: {
       class:
-        'medium-editor-tiptap min-h-[220px] px-4 py-3 text-[1.0625rem] leading-[1.65] text-foreground focus:outline-none',
+        'medium-editor-tiptap min-h-[220px] px-4 py-3 text-sm leading-relaxed text-foreground [overflow-wrap:anywhere] focus:outline-none',
     },
     handleKeyDown(view, event) {
       const ed = editor.value
@@ -190,28 +190,40 @@ defineExpose({
 <!-- ProseMirror sets .medium-editor-tiptap on a node Vue did not render, so it never gets scoped data-v — namespace under .medium-editor only. -->
 <style>
 .medium-editor .medium-editor-tiptap h2 {
-  font-size: 1.35rem;
+  font-size: 1.2rem;
   font-weight: 600;
   letter-spacing: -0.02em;
-  margin: 1.15rem 0 0.45rem;
+  margin: 0.85rem 0 0.35rem;
   line-height: 1.25;
 }
+.medium-editor .medium-editor-tiptap h2:first-child {
+  margin-top: 0;
+}
 .medium-editor .medium-editor-tiptap h3 {
-  font-size: 1.12rem;
+  font-size: 1.05rem;
   font-weight: 600;
-  margin: 1rem 0 0.35rem;
+  margin: 0.75rem 0 0.25rem;
   line-height: 1.3;
 }
+.medium-editor .medium-editor-tiptap h3:first-child {
+  margin-top: 0;
+}
 .medium-editor .medium-editor-tiptap p {
-  margin: 0.55rem 0;
+  margin: 0.45rem 0;
+}
+.medium-editor .medium-editor-tiptap p:first-child {
+  margin-top: 0;
+}
+.medium-editor .medium-editor-tiptap p:last-child {
+  margin-bottom: 0;
 }
 .medium-editor .medium-editor-tiptap ul,
 .medium-editor .medium-editor-tiptap ol {
-  margin: 0.55rem 0;
+  margin: 0.45rem 0;
   padding-left: 1.35rem;
 }
 .medium-editor .medium-editor-tiptap blockquote {
-  margin: 0.85rem 0;
+  margin: 0.65rem 0;
   padding-left: 1rem;
   border-left: 3px solid var(--border);
   color: var(--muted-foreground);
@@ -238,15 +250,15 @@ defineExpose({
   text-underline-offset: 3px;
 }
 .medium-editor .medium-editor-tiptap pre {
-  margin: 0.75rem 0;
-  padding: 0.85rem 1rem;
+  margin: 0.65rem 0;
+  padding: 0.75rem 0.9rem;
   border-radius: 0.5rem;
   background: var(--muted);
   font-size: 0.9em;
   overflow-x: auto;
 }
 .medium-editor .medium-editor-tiptap hr {
-  margin: 1rem 0;
+  margin: 0.85rem 0;
   border: none;
   border-top: 1px solid var(--border);
 }

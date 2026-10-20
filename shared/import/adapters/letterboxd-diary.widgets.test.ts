@@ -18,7 +18,7 @@ describe('letterboxdRatingToStarWidget', () => {
   })
 
   it('rounds to nearest half star within 0–5', () => {
-    expect(letterboxdRatingToStarWidget('4.25')?.value).toBe(4.5)
-    expect(letterboxdRatingToStarWidget('4.24')?.value).toBe(4)
+    expect(letterboxdRatingToStarWidget('4.25')).toEqual({ type: 'starRating', value: 4.5 })
+    expect(letterboxdRatingToStarWidget('4.24')).toEqual({ type: 'starRating', value: 4 })
   })
 })

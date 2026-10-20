@@ -12,7 +12,7 @@ export const letterboxdDiaryCsvAdapter: FileImportAdapter = {
   kind: 'file',
   description:
     'Upload diary.csv from your Letterboxd export zip (Settings → Export your data).',
-  widgetsGenerated: ['starRating'],
+  widgetsGenerated: ['link', 'starRating'],
   fileExtensions: ['.csv'],
   mimeTypes: ['text/csv', 'application/vnd.ms-excel', 'text/plain'],
   parseFile: parseLetterboxdDiaryCsv,

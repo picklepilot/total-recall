@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { EntryImportDraft } from '~~/shared/import/types'
+import type { EntryWidget } from '~~/shared/import/types'
 import type { ImportDraftsResult } from '@/composables/useEntries'
 import { fileImportAdapters, getFileImportAdapter } from '@/lib/import/registry'
 import { Label } from '@/components/ui/label'
@@ -33,6 +34,15 @@ const selectedAdapter = computed(() => getFileImportAdapter(selectedAdapterId.va
 
 function formatDraftDate(d: Date) {
   return d.toISOString().slice(0, 10)
+}
+
+function formatImportWidgetLine(w: EntryWidget): string {
+  switch (w.type) {
+    case 'starRating':
+      return `${w.value}★`
+    case 'link':
+      return w.url
+  }
 }
 
 function readFileAsText(file: File): Promise<string> {
@@ -218,8 +228,7 @@ async function runImport() {
                 <TableCell v-if="previewShowsWidgets" class="text-sm text-muted-foreground">
                   <template v-if="row.widgets?.length">
                     <span v-for="(w, wi) in row.widgets" :key="wi" class="block">
-                      <template v-if="w.type === 'starRating'">{{ w.value }}★</template>
-                      <template v-else>{{ w.type }}</template>
+                      {{ formatImportWidgetLine(w) }}
                     </span>
                   </template>
                   <span v-else>—</span>

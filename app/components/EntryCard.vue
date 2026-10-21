@@ -23,8 +23,12 @@ const props = withDefaults(
     nested?: boolean;
     /** Emphasize the entry a thread page is focused on. */
     highlighted?: boolean;
+    /** No card chrome; the parent supplies the surface and padding. */
+    flush?: boolean;
+    /** Show only the time of day (the parent already shows the date). */
+    timeOnly?: boolean;
   }>(),
-  { nested: false, highlighted: false },
+  { nested: false, highlighted: false, flush: false, timeOnly: false },
 );
 
 const emit = defineEmits<{
@@ -33,45 +37,61 @@ const emit = defineEmits<{
 
 const widgets = computed(() => partitionEntryWidgets(props.entry.widgets));
 
-function formatDay(d: Date) {
-  return d.toLocaleDateString(undefined, {
-    weekday: "short",
+const timeLabel = computed(() => {
+  const d = props.entry.createdAt;
+  if (props.timeOnly) {
+    return d.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+  return d.toLocaleString(undefined, {
     month: "short",
     day: "numeric",
-    year: "numeric",
+    year:
+      d.getFullYear() === new Date().getFullYear() ? undefined : "numeric",
+    hour: "numeric",
+    minute: "2-digit",
   });
-}
+});
 </script>
 
 <template>
   <article
-    class="rounded-xl border bg-card/40"
-    :class="[
-      nested ? 'px-4 py-3' : 'px-5 py-4',
-      highlighted
-        ? 'border-primary/40 ring-2 ring-primary/15'
-        : 'border-border/70',
-    ]"
+    :class="
+      flush
+        ? ''
+        : [
+            'rounded-2xl border bg-card/40',
+            nested ? 'px-4 py-3' : 'px-4 py-3.5 sm:px-5 sm:py-4',
+            highlighted
+              ? 'border-primary/40 ring-2 ring-primary/15'
+              : 'border-border/70',
+          ]
+    "
   >
-    <div
-      class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
-    >
-      <NuxtLink
-        :to="`/entries/${entry.id}`"
-        class="hover:text-foreground hover:underline underline-offset-4"
+    <div class="flex items-start gap-2">
+      <div
+        class="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0.5 pt-0.5 text-xs text-muted-foreground"
       >
-        <time :datetime="entry.createdAt.toISOString()">{{
-          formatDay(entry.createdAt)
-        }}</time>
-      </NuxtLink>
-      <template v-if="entry.tags.length">
-        <span v-for="t in entry.tags" :key="t">
-          <Badge variant="secondary" class="font-normal">{{ t }}</Badge>
-        </span>
-      </template>
+        <NuxtLink
+          :to="`/entries/${entry.id}`"
+          class="shrink-0 font-medium tabular-nums text-foreground/70 underline-offset-4 hover:text-foreground hover:underline"
+        >
+          <time :datetime="entry.createdAt.toISOString()">{{
+            timeLabel
+          }}</time>
+        </NuxtLink>
+        <span
+          v-for="t in entry.tags"
+          :key="t"
+          class="truncate text-muted-foreground/90"
+          >#{{ t }}</span
+        >
+      </div>
       <DropdownMenu>
         <DropdownMenuTrigger
-          class="-my-1 ml-auto grid size-7 cursor-pointer place-items-center rounded-full outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50"
+          class="-mt-1.5 -mr-2 grid size-8 shrink-0 cursor-pointer touch-manipulation place-items-center rounded-full text-muted-foreground outline-none transition-colors hover:bg-foreground/5 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 data-[state=open]:bg-foreground/5"
           aria-label="Entry actions"
         >
           <Ellipsis class="size-4" />
@@ -81,12 +101,6 @@ function formatDay(d: Date) {
             <NuxtLink :to="`/entries/${entry.id}`">
               <MessagesSquare />
               Open thread
-            </NuxtLink>
-          </DropdownMenuItem>
-          <DropdownMenuItem v-if="!entry.deleted" as-child>
-            <NuxtLink :to="{ path: '/', query: { parent: entry.id } }">
-              <CornerDownRight />
-              Continue thread
             </NuxtLink>
           </DropdownMenuItem>
           <template v-if="!entry.deleted">
@@ -103,16 +117,15 @@ function formatDay(d: Date) {
       </DropdownMenu>
     </div>
 
-    <p v-if="entry.deleted" class="mt-2 text-sm italic text-muted-foreground">
+    <p v-if="entry.deleted" class="mt-1 text-sm italic text-muted-foreground">
       This entry was deleted.
     </p>
-    <template v-else>
+    <div v-else class="mt-1 flex flex-col gap-2.5">
       <EntryWidgets
         v-if="widgets.withoutLink.length"
         :widgets="widgets.withoutLink"
-        class="mt-2"
       />
-      <div v-if="entry.contentText.trim()" class="mt-3">
+      <div v-if="entry.contentText.trim()">
         <ClientOnly>
           <EntryBodyTiptap
             v-if="parseEntryDoc(entry.contentJson)"
@@ -131,21 +144,21 @@ function formatDay(d: Date) {
       <EntryWidgets
         v-if="widgets.linksOnly.length"
         :widgets="widgets.linksOnly"
-        class="mt-3 text-sm"
+        class="text-sm"
       />
-    </template>
+    </div>
 
     <div
       v-if="!entry.deleted || $slots.footer"
-      class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs"
+      class="mt-2 -mb-1 -ml-2.5 flex flex-wrap items-center gap-1 text-xs"
     >
       <NuxtLink
         v-if="!entry.deleted"
         :to="{ path: '/', query: { parent: entry.id } }"
-        class="inline-flex items-center gap-1 font-medium text-muted-foreground transition-colors hover:text-foreground"
+        class="inline-flex h-8 touch-manipulation items-center gap-1.5 rounded-full px-2.5 font-medium text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
       >
         <CornerDownRight class="size-3.5" aria-hidden="true" />
-        Continue thread
+        Reply
       </NuxtLink>
       <slot name="footer" />
     </div>

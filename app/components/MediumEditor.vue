@@ -12,6 +12,15 @@ import {
   type SlashCommandItem,
 } from '@/lib/editorSlashCommands'
 
+const props = withDefaults(
+  defineProps<{
+    /** Drop the frame so the editor can sit inside a parent surface. */
+    bare?: boolean
+    placeholder?: string
+  }>(),
+  { bare: false, placeholder: 'Write what you want to remember…  Type / for blocks.' },
+)
+
 const emit = defineEmits<{
   change: [json: string, text: string]
 }>()
@@ -39,13 +48,14 @@ const editor = useEditor({
   extensions: [
     ...buildEntryExtensions({ openLinkOnClick: false }),
     Placeholder.configure({
-      placeholder: 'Write what you want to remember…  Type / for blocks.',
+      placeholder: props.placeholder,
     }),
   ],
   editorProps: {
     attributes: {
-      class:
-        'medium-editor-tiptap min-h-[220px] px-4 py-3 text-sm leading-relaxed text-foreground [overflow-wrap:anywhere] focus:outline-none',
+      class: props.bare
+        ? 'medium-editor-tiptap min-h-[11rem] max-h-[45dvh] overflow-y-auto overscroll-contain px-5 pt-5 pb-3 text-base leading-relaxed text-foreground [overflow-wrap:anywhere] focus:outline-none sm:min-h-[13rem] sm:max-h-[28rem]'
+        : 'medium-editor-tiptap min-h-[220px] max-h-[60dvh] overflow-y-auto overscroll-contain px-4 py-3 text-base leading-relaxed text-foreground [overflow-wrap:anywhere] focus:outline-none sm:text-sm',
     },
     handleKeyDown(view, event) {
       const ed = editor.value
@@ -135,7 +145,12 @@ defineExpose({
 
 <template>
   <div
-    class="medium-editor rounded-xl border border-border/80 bg-card/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]"
+    class="medium-editor"
+    :class="
+      bare
+        ? ''
+        : 'rounded-xl border border-border/80 bg-card/40 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]'
+    "
   >
     <EditorContent v-if="editor" :editor="editor" />
     <FloatingMenu

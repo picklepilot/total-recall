@@ -10,7 +10,7 @@ import {
   Star,
   X,
 } from "lucide-vue-next";
-import type { LinkPreview } from "@/types/entry";
+import type { EntryView, LinkPreview } from "@/types/entry";
 import ComposeStarRatingField from "@/components/entry-compose/ComposeStarRatingField.vue";
 import ComposeLinkField from "@/components/entry-compose/ComposeLinkField.vue";
 import ComposeAttachmentToggles from "@/components/entry-compose/ComposeAttachmentToggles.vue";
@@ -27,7 +27,7 @@ import {
 const nuxtApp = useNuxtApp();
 const route = useRoute();
 const router = useRouter();
-const { entries, ready, addEntry } = useEntries();
+const { ready, addEntry, fetchEntry } = useEntries();
 const { signedIn, signInWithGoogle } = useAuth();
 
 const firebaseConfigured = useFirebaseUiReady();
@@ -38,8 +38,17 @@ const parentId = computed(() =>
     ? route.query.parent
     : null,
 );
-const parentEntry = computed(() =>
-  parentId.value ? entries.value.find((e) => e.id === parentId.value) : undefined,
+const parentEntry = ref<EntryView | null>(null);
+watch(
+  [parentId, ready],
+  async ([id, ok]) => {
+    if (!id || !ok) {
+      parentEntry.value = null;
+      return;
+    }
+    parentEntry.value = await fetchEntry(id);
+  },
+  { immediate: true },
 );
 
 function clearParent() {

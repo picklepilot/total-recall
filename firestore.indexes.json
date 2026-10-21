@@ -30,6 +30,23 @@
         { "fieldPath": "importMeta.source", "order": "ASCENDING" },
         { "fieldPath": "importMeta.externalId", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "parentId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "entries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "userId", "order": "ASCENDING" },
+        { "fieldPath": "rootId", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": []

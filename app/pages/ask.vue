@@ -11,7 +11,15 @@ useHead({
 
 const nuxtApp = useNuxtApp();
 const firebaseConfigured = useFirebaseUiReady();
-const { entries, ready } = useEntries();
+const { hasEntries, ready, checkHasEntries } = useEntries();
+
+watch(
+  ready,
+  (ok) => {
+    if (ok) checkHasEntries();
+  },
+  { immediate: true },
+);
 const { signedIn, authHeaders } = useAuth();
 
 const prompt = ref("");
@@ -294,7 +302,7 @@ watch(
     </div>
 
     <div
-      v-if="signedIn && firebaseConfigured && ready && entries.length"
+      v-if="signedIn && firebaseConfigured && ready && hasEntries"
       class="mx-auto mt-8 max-w-2xl rounded-xl border border-border/60 bg-muted/15 px-4 py-4 sm:px-5"
     >
       <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
@@ -355,7 +363,7 @@ watch(
     </Card>
 
     <div
-      v-else-if="ready && !entries.length"
+      v-else-if="ready && hasEntries === false"
       class="mx-auto mt-10 max-w-2xl rounded-xl border border-dashed border-border py-12 text-center"
     >
       <p class="text-sm text-muted-foreground">
@@ -371,7 +379,7 @@ watch(
     </div>
 
     <div
-      v-if="sessionStarted && signedIn && entries.length"
+      v-if="sessionStarted && signedIn && hasEntries"
       ref="responseRef"
       class="mx-auto mt-10 max-w-2xl space-y-6"
     >

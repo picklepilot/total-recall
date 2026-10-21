@@ -49,13 +49,18 @@ export interface EntryDoc {
   depth?: number
   /** Set by server when an entry with replies is deleted; content is cleared. */
   deleted?: boolean
+  /** Top-level entries only: number of replies anywhere in the thread. */
+  replyCount?: number
   /** Set by server (`/api/entries/index`) for Firestore vector search — not writable by clients. */
   embedModel?: string
   embeddedAt?: Timestamp
 }
 
 export interface EntryView
-  extends Omit<EntryDoc, 'createdAt' | 'parentId' | 'rootId' | 'ancestorIds' | 'depth' | 'deleted'> {
+  extends Omit<
+    EntryDoc,
+    'createdAt' | 'parentId' | 'rootId' | 'ancestorIds' | 'depth' | 'deleted' | 'replyCount'
+  > {
   id: string
   createdAt: Date
   parentId: string | null
@@ -63,4 +68,5 @@ export interface EntryView
   ancestorIds: string[]
   depth: number
   deleted: boolean
+  replyCount: number
 }

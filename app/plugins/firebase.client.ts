@@ -1,6 +1,12 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app'
 import { getAuth, onAuthStateChanged, type User } from 'firebase/auth'
-import { getFirestore } from 'firebase/firestore'
+import {
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+  type Firestore,
+} from 'firebase/firestore'
 
 let app: FirebaseApp | null = null
 
@@ -37,7 +43,15 @@ export default defineNuxtPlugin(() => {
   }
 
   const auth = getAuth(app)
-  const db = getFirestore(app)
+  let db: Firestore
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+    })
+  } catch {
+    // HMR re-runs this plugin against an app whose Firestore is already initialized.
+    db = getFirestore(app)
+  }
 
   onAuthStateChanged(auth, (u) => {
     user.value = u

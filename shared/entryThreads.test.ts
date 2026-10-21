@@ -4,6 +4,7 @@ import {
   buildThreadIndex,
   countDescendants,
   normalizeThreadFields,
+  planThreadBackfill,
   resolveAncestors,
   threadFieldsForNewEntry,
 } from './entryThreads'
@@ -86,5 +87,45 @@ describe('buildThreadIndex', () => {
       'a',
       'c',
     ])
+  })
+})
+
+describe('planThreadBackfill', () => {
+  it('writes explicit thread fields on legacy entries', () => {
+    const updates = planThreadBackfill([{ id: 'legacy' }])
+    expect(updates.get('legacy')).toEqual({
+      parentId: null,
+      rootId: 'legacy',
+      ancestorIds: [],
+      depth: 0,
+    })
+  })
+
+  it('counts every reply in a thread on its root, including replies to legacy roots', () => {
+    const updates = planThreadBackfill([
+      { id: 'legacy' },
+      { id: 'r1', parentId: 'legacy', rootId: 'legacy', ancestorIds: ['legacy'], depth: 1 },
+      { id: 'r2', parentId: 'r1', rootId: 'legacy', ancestorIds: ['legacy', 'r1'], depth: 2 },
+    ])
+    expect(updates.get('legacy')?.replyCount).toBe(2)
+    expect(updates.has('r1')).toBe(false)
+    expect(updates.has('r2')).toBe(false)
+  })
+
+  it('skips entries that are already up to date', () => {
+    const fields = { parentId: null, rootId: 'a', ancestorIds: [], depth: 0 }
+    const updates = planThreadBackfill([
+      { id: 'a', ...fields },
+      { id: 'b', ...fields, rootId: 'b', replyCount: 0 },
+    ])
+    expect(updates.size).toBe(0)
+  })
+
+  it('corrects a stale reply count', () => {
+    const updates = planThreadBackfill([
+      { id: 'a', parentId: null, rootId: 'a', ancestorIds: [], depth: 0, replyCount: 5 },
+      { id: 'b', parentId: 'a', rootId: 'a', ancestorIds: ['a'], depth: 1 },
+    ])
+    expect(updates.get('a')).toEqual({ replyCount: 1 })
   })
 })

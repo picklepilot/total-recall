@@ -19,7 +19,7 @@ const hasRichPreview = computed(
 )
 
 const iframeAllow =
-  'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen'
+  'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen; compute-pressure'
 </script>
 
 <template>

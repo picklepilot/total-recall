@@ -2,6 +2,11 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
+    match /users/{userId} {
+      // Written by Admin SDK during thread backfill; clients never need this doc.
+      allow read, write: if false;
+    }
+
     match /entries/{entryId} {
       // Must match MAX_THREAD_DEPTH in shared/entryThreads.ts.
       function maxThreadDepth() {
@@ -37,6 +42,7 @@ service cloud.firestore {
         && !request.resource.data.keys().hasAny(['embedding', 'deleted'])
         && (isTopLevel(request.resource.data) || isValidReply(request.resource.data));
       // Clients cannot change server-managed or thread fields; Admin SDK bypasses these rules.
+      // `replyCount` is writable so a reply can increment the root in the same batch.
       allow update: if request.auth != null && request.auth.uid == resource.data.userId
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
           'embedding', 'userId', 'parentId', 'rootId', 'ancestorIds', 'depth', 'deleted'

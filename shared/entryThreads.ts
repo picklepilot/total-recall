@@ -105,6 +105,45 @@ export function countDescendants<T extends ThreadNodeInput>(
   return count
 }
 
+export interface BackfillSource extends ThreadSource {
+  id: string
+  replyCount?: number
+}
+
+export type ThreadBackfillUpdate = Partial<ThreadFields & { replyCount: number }>
+
+/** Bump when the backfill writes new required fields; stored on `users/{uid}`. */
+export const THREAD_SCHEMA_VERSION = 1
+
+/**
+ * Writes needed so every entry stores explicit thread fields (top-level entries are
+ * queried with `parentId == null`) and every top-level entry has an accurate
+ * `replyCount` (all replies in its thread, including deleted placeholders).
+ */
+export function planThreadBackfill(docs: BackfillSource[]): Map<string, ThreadBackfillUpdate> {
+  const normalized = docs.map((d) => ({ d, t: normalizeThreadFields(d.id, d) }))
+
+  const repliesPerRoot = new Map<string, number>()
+  for (const { t } of normalized) {
+    if (t.parentId) repliesPerRoot.set(t.rootId, (repliesPerRoot.get(t.rootId) ?? 0) + 1)
+  }
+
+  const updates = new Map<string, ThreadBackfillUpdate>()
+  for (const { d, t } of normalized) {
+    const u: ThreadBackfillUpdate = {}
+    if (d.parentId === undefined) u.parentId = t.parentId
+    if (d.rootId === undefined) u.rootId = t.rootId
+    if (!Array.isArray(d.ancestorIds)) u.ancestorIds = t.ancestorIds
+    if (typeof d.depth !== 'number') u.depth = t.depth
+    if (!t.parentId) {
+      const count = repliesPerRoot.get(d.id) ?? 0
+      if ((d.replyCount ?? 0) !== count) u.replyCount = count
+    }
+    if (Object.keys(u).length) updates.set(d.id, u)
+  }
+  return updates
+}
+
 /** Ancestors root-first, skipping any that are no longer loaded. */
 export function resolveAncestors<T extends ThreadNodeInput>(
   ancestorIds: string[],

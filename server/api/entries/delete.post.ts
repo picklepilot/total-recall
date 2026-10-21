@@ -4,6 +4,7 @@ import {
   type DocumentReference,
   type Transaction,
 } from 'firebase-admin/firestore'
+import { normalizeThreadFields } from '~~/shared/entryThreads'
 
 interface Body {
   entryId?: string
@@ -51,6 +52,15 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 403, statusMessage: 'Not your entry' })
     }
 
+    const rootId = normalizeThreadFields(entryId, {
+      parentId: data.parentId as string | null | undefined,
+      rootId: data.rootId as string | undefined,
+      ancestorIds: data.ancestorIds as string[] | undefined,
+      depth: data.depth as number | undefined,
+    }).rootId
+    const rootRef = rootId !== entryId ? entries.doc(rootId) : ref
+    if (rootId !== entryId) await tx.get(rootRef)
+
     if (await hasRepliesOtherThan(tx, entryId, null)) {
       tx.update(ref, {
         deleted: true,
@@ -64,7 +74,7 @@ export default defineEventHandler(async (event) => {
         embedModel: FieldValue.delete(),
         embeddedAt: FieldValue.delete(),
       })
-      return 'tombstoned' as const
+      return { result: 'tombstoned' as const, deletedIds: [] as string[], rootId }
     }
 
     // Transactions require all reads before writes: collect deletable ancestors first.
@@ -82,9 +92,14 @@ export default defineEventHandler(async (event) => {
       parentId = (parent.parentId as string | null | undefined) ?? null
     }
 
+    const deletedIds = toDelete.map((r) => r.id)
+    const rootAlsoDeleted = deletedIds.includes(rootId)
+    if (!rootAlsoDeleted && deletedIds.length) {
+      tx.update(rootRef, { replyCount: FieldValue.increment(-deletedIds.length) })
+    }
     for (const r of toDelete) tx.delete(r)
-    return 'deleted' as const
+    return { result: 'deleted' as const, deletedIds, rootId }
   })
 
-  return { result }
+  return result
 })

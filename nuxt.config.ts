@@ -30,6 +30,16 @@ export default defineNuxtConfig({
     plugins: [tailwindcss()],
   },
 
+  routeRules: {
+    '/**': {
+      headers: {
+        // YouTube embeds call Compute Pressure; the default allowlist is `self` only.
+        'Permissions-Policy':
+          'compute-pressure=(self "https://www.youtube-nocookie.com" "https://www.youtube.com")',
+      },
+    },
+  },
+
   modules: ['shadcn-nuxt'],
 
   shadcn: {

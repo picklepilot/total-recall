@@ -3,21 +3,50 @@ import {
   ChevronDown,
   History,
   KeyRound,
+  Loader2,
   LockKeyhole,
   PenLine,
   Sparkles,
 } from 'lucide-vue-next'
+import { useIntersectionObserver } from '@vueuse/core'
 import type { EntryView } from '@/types/entry'
-import { buildThreadIndex, countDescendants } from '~~/shared/entryThreads'
+import { buildThreadIndex } from '~~/shared/entryThreads'
 
 useHead({ title: 'Timeline — Total Recall' })
 
 const firebaseConfigured = useFirebaseUiReady()
-const { entries, loaded, deleteEntry } = useEntries()
+const {
+  byId,
+  roots,
+  ready,
+  hasMoreRoots,
+  timelineLoaded,
+  timelineLoading,
+  loadingMore,
+  loadedThreads,
+  threadLoading,
+  ensureTimeline,
+  loadMoreRoots,
+  loadThread,
+  deleteEntry,
+} = useEntries()
 const { signedIn } = useAuth()
 const { confirmAndDelete } = useEntryDeletion(deleteEntry)
 
-const threads = computed(() => buildThreadIndex(entries.value))
+const threads = computed(() => buildThreadIndex(Object.values(byId.value)))
+
+watch(
+  [ready, signedIn],
+  ([ok, in_]) => {
+    if (ok && in_) ensureTimeline()
+  },
+  { immediate: true },
+)
+
+const loadMoreEl = ref<HTMLElement | null>(null)
+useIntersectionObserver(loadMoreEl, ([entry]) => {
+  if (entry?.isIntersecting) loadMoreRoots()
+})
 
 function startOfDay(d: Date) {
   return new Date(d.getFullYear(), d.getMonth(), d.getDate())
@@ -41,7 +70,7 @@ function dayLabel(day: Date, today: Date) {
 const days = computed(() => {
   const today = startOfDay(new Date())
   const groups: { key: string; label: string; entries: EntryView[] }[] = []
-  for (const entry of threads.value.roots) {
+  for (const entry of roots.value) {
     const day = startOfDay(entry.createdAt)
     const key = day.toISOString()
     const last = groups.at(-1)
@@ -52,25 +81,28 @@ const days = computed(() => {
 })
 
 const entryCountLabel = computed(() => {
-  if (!signedIn.value || !loaded.value) return 'Your history'
-  const n = entries.value.length
-  return `${n} ${n === 1 ? 'entry' : 'entries'}`
+  if (!signedIn.value || !timelineLoaded.value) return 'Your history'
+  return 'Newest first'
 })
 
 const expanded = ref(new Set<string>())
-function toggleThread(id: string) {
+async function toggleThread(id: string) {
   const next = new Set(expanded.value)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
+  if (next.has(id)) {
+    next.delete(id)
+    expanded.value = next
+    return
+  }
+  next.add(id)
   expanded.value = next
-}
-
-function replyCount(id: string) {
-  return countDescendants(id, threads.value.childrenOf)
+  await loadThread(id)
 }
 
 function onDelete(entry: EntryView) {
-  confirmAndDelete(entry, Boolean(threads.value.childrenOf.get(entry.id)?.length))
+  const hasReplies = entry.parentId
+    ? Boolean(threads.value.childrenOf.get(entry.id)?.length)
+    : entry.replyCount > 0
+  confirmAndDelete(entry, hasReplies)
 }
 </script>
 
@@ -134,7 +166,11 @@ function onDelete(entry: EntryView) {
       </p>
     </section>
 
-    <div v-else-if="!loaded" aria-busy="true" aria-label="Loading entries">
+    <div
+      v-else-if="!timelineLoaded || timelineLoading"
+      aria-busy="true"
+      aria-label="Loading entries"
+    >
       <div class="mb-2 h-7 w-20 animate-pulse rounded-full bg-foreground/[0.06]" />
       <div
         class="divide-y divide-foreground/[0.06] overflow-hidden rounded-3xl border border-foreground/[0.06] bg-card/70 shadow-sm dark:bg-white/[0.04]"
@@ -148,7 +184,7 @@ function onDelete(entry: EntryView) {
     </div>
 
     <section
-      v-else-if="!entries.length"
+      v-else-if="!roots.length"
       class="my-auto rounded-3xl border border-dashed border-foreground/10 p-6 text-center sm:p-8"
     >
       <span
@@ -200,7 +236,7 @@ function onDelete(entry: EntryView) {
             class="px-4 py-3.5 sm:px-5 sm:py-4"
           >
             <EntryCard :entry="item" flush time-only @delete="onDelete">
-              <template v-if="replyCount(item.id)" #footer>
+              <template v-if="item.replyCount" #footer>
                 <button
                   type="button"
                   class="inline-flex h-8 touch-manipulation items-center gap-1 rounded-full px-2.5 font-medium transition-colors hover:bg-foreground/5 hover:text-foreground"
@@ -212,8 +248,13 @@ function onDelete(entry: EntryView) {
                   :aria-expanded="expanded.has(item.id)"
                   @click="toggleThread(item.id)"
                 >
-                  {{ replyCount(item.id) }}
-                  {{ replyCount(item.id) === 1 ? 'reply' : 'replies' }}
+                  <Loader2
+                    v-if="threadLoading[item.id]"
+                    class="size-3.5 animate-spin"
+                    aria-hidden="true"
+                  />
+                  {{ item.replyCount }}
+                  {{ item.replyCount === 1 ? 'reply' : 'replies' }}
                   <ChevronDown
                     class="size-3.5 transition-transform duration-200"
                     :class="expanded.has(item.id) ? 'rotate-180' : ''"
@@ -222,8 +263,14 @@ function onDelete(entry: EntryView) {
                 </button>
               </template>
             </EntryCard>
+            <p
+              v-if="expanded.has(item.id) && threadLoading[item.id] && !loadedThreads[item.id]"
+              class="mt-3 text-xs text-muted-foreground"
+            >
+              Loading replies…
+            </p>
             <EntryThreadBranch
-              v-if="expanded.has(item.id)"
+              v-else-if="expanded.has(item.id) && loadedThreads[item.id]"
               :parent-id="item.id"
               :children-of="threads.childrenOf"
               flush
@@ -234,6 +281,19 @@ function onDelete(entry: EntryView) {
           </li>
         </ol>
       </section>
+
+      <div ref="loadMoreEl" class="flex justify-center pt-1">
+        <Button
+          v-if="hasMoreRoots"
+          type="button"
+          variant="secondary"
+          class="h-10 touch-manipulation rounded-full px-5"
+          :disabled="loadingMore"
+          @click="loadMoreRoots"
+        >
+          {{ loadingMore ? 'Loading…' : 'Load more' }}
+        </Button>
+      </div>
     </div>
   </div>
 </template>

@@ -5,7 +5,6 @@ import {
   MessagesSquare,
   Trash2,
 } from "lucide-vue-next";
-import { parseEntryDoc } from "@/lib/tiptapShared";
 import { partitionEntryWidgets } from "@/lib/entry-widgets/partitionWidgets";
 import type { EntryView } from "@/types/entry";
 import {
@@ -127,13 +126,10 @@ const timeLabel = computed(() => {
       />
       <div v-if="entry.contentText.trim()">
         <ClientOnly>
-          <EntryBodyTiptap
-            v-if="parseEntryDoc(entry.contentJson)"
+          <EntryBody
             :content-json="entry.contentJson"
+            :content-text="entry.contentText"
           />
-          <p v-else class="whitespace-pre-wrap text-sm leading-relaxed">
-            {{ entry.contentText.trim() }}
-          </p>
           <template #fallback>
             <p class="whitespace-pre-wrap text-sm leading-relaxed">
               {{ entry.contentText.trim() }}

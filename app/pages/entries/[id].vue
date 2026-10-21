@@ -9,12 +9,37 @@ useHead({ title: 'Thread — Total Recall' })
 const route = useRoute()
 const router = useRouter()
 const firebaseConfigured = useFirebaseUiReady()
-const { entries, loaded, deleteEntry } = useEntries()
+const { byId, ready, loadThread, fetchEntry, deleteEntry } = useEntries()
 const { signedIn } = useAuth()
 const { confirmAndDelete } = useEntryDeletion(deleteEntry)
 
 const entryId = computed(() => String(route.params.id))
-const threads = computed(() => buildThreadIndex(entries.value))
+const pageReady = ref(false)
+const missing = ref(false)
+
+async function loadPage() {
+  pageReady.value = false
+  missing.value = false
+  if (!ready.value) return
+  const found = await fetchEntry(entryId.value)
+  if (!found) {
+    missing.value = true
+    pageReady.value = true
+    return
+  }
+  await loadThread(found.rootId)
+  pageReady.value = true
+}
+
+watch([entryId, ready, signedIn], ([, ok, in_]) => {
+  if (ok && in_) loadPage()
+  else if (!in_) {
+    pageReady.value = true
+    missing.value = false
+  }
+}, { immediate: true })
+
+const threads = computed(() => buildThreadIndex(Object.values(byId.value)))
 const entry = computed(() => threads.value.byId.get(entryId.value))
 const ancestors = computed(() =>
   entry.value ? resolveAncestors(entry.value.ancestorIds, threads.value.byId) : [],
@@ -55,10 +80,10 @@ async function onDelete(target: EntryView) {
       </CardHeader>
     </Card>
 
-    <p v-else-if="!loaded" class="text-sm text-muted-foreground">Loading…</p>
+    <p v-else-if="!pageReady" class="text-sm text-muted-foreground">Loading…</p>
 
     <div
-      v-else-if="!entry"
+      v-else-if="missing || !entry"
       class="rounded-xl border border-dashed border-border py-16 text-center"
     >
       <p class="text-sm text-muted-foreground">

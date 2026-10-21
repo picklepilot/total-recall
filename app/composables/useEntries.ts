@@ -3,45 +3,26 @@ import {
   doc,
   getDoc,
   getDocs,
+  increment,
   limit,
-  onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  startAfter,
   setDoc,
   Timestamp,
   where,
+  writeBatch,
   type Firestore,
+  type QueryDocumentSnapshot,
 } from 'firebase/firestore'
 import type { User } from 'firebase/auth'
-import type { EntryDoc, EntryView, EntryWidget, ImportMeta, LinkPreview } from '@/types/entry'
+import type { EntryView, EntryWidget, ImportMeta } from '@/types/entry'
 import type { EntryImportDraft } from '~~/shared/import/types'
-import { coalesceEntryWidgetsWithLegacyLink } from '~~/shared/entryWidgetsNormalize'
-import { normalizeThreadFields, threadFieldsForNewEntry } from '~~/shared/entryThreads'
+import { mapEntryDoc, type EntrySnapshot } from '@/lib/entryDoc'
+import { threadFieldsForNewEntry } from '~~/shared/entryThreads'
 
-/** Firestore rows may include legacy `url` / `linkPreview` before link widgets. */
-type EntrySnapshot = EntryDoc & { url?: string | null; linkPreview?: LinkPreview | null }
-
-function mapDoc(id: string, data: EntrySnapshot): EntryView {
-  const created = data.createdAt?.toDate?.() ?? new Date()
-  const merged = coalesceEntryWidgetsWithLegacyLink(
-    data.widgets,
-    data.url,
-    data.linkPreview,
-  )
-  return {
-    id,
-    userId: data.userId,
-    contentJson: data.contentJson,
-    contentText: data.contentText,
-    tags: data.tags ?? [],
-    createdAt: created,
-    widgets: merged.length ? merged : undefined,
-    importMeta: data.importMeta,
-    ...normalizeThreadFields(id, data),
-    deleted: Boolean(data.deleted),
-  }
-}
+export const TIMELINE_PAGE_SIZE = 30
 
 export interface ImportDraftsResult {
   imported: number
@@ -52,6 +33,17 @@ export interface ImportDraftsResult {
   dryRun?: boolean
 }
 
+export interface DeleteEntryResult {
+  result: 'deleted' | 'tombstoned'
+  deletedIds: string[]
+  rootId: string
+}
+
+/** Pagination cursor is a Firestore snapshot — keep it off `useState`. */
+let timelineCursor: QueryDocumentSnapshot | null = null
+let backfillInflight: Promise<void> | null = null
+const threadInflight = new Map<string, Promise<void>>()
+
 export function useEntries() {
   const nuxtApp = useNuxtApp()
   const { authHeaders } = useAuth()
@@ -60,49 +52,181 @@ export function useEntries() {
   /** Must use reactive `user` from onAuthStateChanged — `auth.currentUser` is not Vue-reactive. */
   const ready = computed(() => Boolean(nuxtApp.$firebaseReady && db.value && user.value))
 
-  const entries = ref<EntryView[]>([])
-  /** True once the first snapshot has arrived (distinguishes "loading" from "no entries"). */
-  const loaded = ref(false)
-  let unsub: (() => void) | null = null
+  const byId = useState<Record<string, EntryView>>('entries-by-id', () => ({}))
+  const rootIds = useState<string[]>('entries-root-ids', () => [])
+  const loadedThreads = useState<Record<string, boolean>>('entries-loaded-threads', () => ({}))
+  const threadLoading = useState<Record<string, boolean>>('entries-thread-loading', () => ({}))
+  const hasMoreRoots = useState('entries-has-more-roots', () => false)
+  const timelineLoaded = useState('entries-timeline-loaded', () => false)
+  const timelineLoading = useState('entries-timeline-loading', () => false)
+  const loadingMore = useState('entries-loading-more', () => false)
+  const hasEntries = useState<boolean | null>('entries-has-any', () => null)
+  const backfilled = useState('entries-backfilled', () => false)
 
-  function subscribe() {
-    if (!db.value || !user.value) return
-    const uid = user.value.uid
-    const q = query(
-      collection(db.value, 'entries'),
-      where('userId', '==', uid),
-      orderBy('createdAt', 'desc'),
-    )
-    unsub?.()
-    unsub = onSnapshot(q, (snap) => {
-      const list: EntryView[] = []
-      snap.forEach((doc) => {
-        const d = doc.data() as EntrySnapshot
-        if (d.userId === uid) list.push(mapDoc(doc.id, d))
-      })
-      entries.value = list
-      loaded.value = true
-    })
+  const roots = computed(() =>
+    rootIds.value.map((id) => byId.value[id]).filter((e): e is EntryView => Boolean(e)),
+  )
+  const entries = computed(() => Object.values(byId.value))
+
+  function putEntries(list: EntryView[]) {
+    if (!list.length) return
+    const next = { ...byId.value }
+    for (const e of list) next[e.id] = e
+    byId.value = next
   }
 
-  watch(
-    ready,
-    (ok) => {
-      if (ok) subscribe()
-      else {
-        unsub?.()
-        unsub = null
-        entries.value = []
-        loaded.value = false
-      }
-    },
-    { immediate: true },
-  )
+  function resetCache() {
+    byId.value = {}
+    rootIds.value = []
+    loadedThreads.value = {}
+    threadLoading.value = {}
+    hasMoreRoots.value = false
+    timelineLoaded.value = false
+    timelineLoading.value = false
+    loadingMore.value = false
+    hasEntries.value = null
+    backfilled.value = false
+    timelineCursor = null
+    backfillInflight = null
+    threadInflight.clear()
+  }
 
-  onUnmounted(() => {
-    unsub?.()
-    unsub = null
+  function invalidateTimeline() {
+    rootIds.value = []
+    timelineLoaded.value = false
+    hasMoreRoots.value = false
+    timelineCursor = null
+  }
+
+  watch(ready, (ok) => {
+    if (!ok) resetCache()
   })
+
+  async function ensureBackfill() {
+    if (backfilled.value || !user.value) return
+    if (backfillInflight) return backfillInflight
+    backfillInflight = (async () => {
+      try {
+        const headers = await authHeaders()
+        await $fetch('/api/entries/backfill-threads', { method: 'POST', headers })
+        backfilled.value = true
+      } catch (e) {
+        console.warn('[total-recall] thread backfill failed:', e)
+      } finally {
+        backfillInflight = null
+      }
+    })()
+    return backfillInflight
+  }
+
+  async function fetchRootsPage() {
+    if (!db.value || !user.value) return
+    const uid = user.value.uid
+    const constraints = [
+      where('userId', '==', uid),
+      where('parentId', '==', null),
+      orderBy('createdAt', 'desc'),
+      ...(timelineCursor ? [startAfter(timelineCursor)] : []),
+      limit(TIMELINE_PAGE_SIZE),
+    ]
+    const snap = await getDocs(query(collection(db.value, 'entries'), ...constraints))
+    const list: EntryView[] = []
+    snap.forEach((d) => {
+      const data = d.data() as EntrySnapshot
+      if (data.userId === uid) list.push(mapEntryDoc(d.id, data))
+    })
+    putEntries(list)
+    const seen = new Set(rootIds.value)
+    const appended = list.map((e) => e.id).filter((id) => !seen.has(id))
+    if (appended.length) rootIds.value = [...rootIds.value, ...appended]
+    timelineCursor = snap.docs.at(-1) ?? timelineCursor
+    hasMoreRoots.value = snap.size === TIMELINE_PAGE_SIZE
+    if (list.length) hasEntries.value = true
+  }
+
+  async function ensureTimeline() {
+    if (!ready.value || timelineLoaded.value || timelineLoading.value) return
+    timelineLoading.value = true
+    try {
+      await ensureBackfill()
+      await fetchRootsPage()
+      timelineLoaded.value = true
+    } finally {
+      timelineLoading.value = false
+    }
+  }
+
+  async function loadMoreRoots() {
+    if (!ready.value || !hasMoreRoots.value || loadingMore.value) return
+    if (!timelineCursor) {
+      hasMoreRoots.value = false
+      return
+    }
+    loadingMore.value = true
+    try {
+      await fetchRootsPage()
+    } finally {
+      loadingMore.value = false
+    }
+  }
+
+  async function loadThread(rootId: string) {
+    if (!db.value || !user.value || loadedThreads.value[rootId]) return
+    const pending = threadInflight.get(rootId)
+    if (pending) return pending
+    const uid = user.value.uid
+    const work = (async () => {
+      threadLoading.value = { ...threadLoading.value, [rootId]: true }
+      try {
+        await ensureBackfill()
+        const snap = await getDocs(
+          query(
+            collection(db.value!, 'entries'),
+            where('userId', '==', uid),
+            where('rootId', '==', rootId),
+          ),
+        )
+        const list: EntryView[] = []
+        snap.forEach((d) => {
+          const data = d.data() as EntrySnapshot
+          if (data.userId === uid) list.push(mapEntryDoc(d.id, data))
+        })
+        putEntries(list)
+        loadedThreads.value = { ...loadedThreads.value, [rootId]: true }
+      } finally {
+        threadLoading.value = { ...threadLoading.value, [rootId]: false }
+        threadInflight.delete(rootId)
+      }
+    })()
+    threadInflight.set(rootId, work)
+    return work
+  }
+
+  async function fetchEntry(id: string): Promise<EntryView | null> {
+    const cached = byId.value[id]
+    if (cached) return cached
+    if (!db.value || !user.value) return null
+    const snap = await getDoc(doc(db.value, 'entries', id))
+    if (!snap.exists()) return null
+    const data = snap.data() as EntrySnapshot
+    if (data.userId !== user.value.uid) return null
+    const view = mapEntryDoc(snap.id, data)
+    putEntries([view])
+    return view
+  }
+
+  async function checkHasEntries() {
+    if (hasEntries.value !== null) return
+    if (rootIds.value.length || Object.keys(byId.value).length) {
+      hasEntries.value = true
+      return
+    }
+    if (!db.value || !user.value) return
+    const snap = await getDocs(
+      query(collection(db.value, 'entries'), where('userId', '==', user.value.uid), limit(1)),
+    )
+    hasEntries.value = !snap.empty
+  }
 
   async function indexEntryAfterWrite(entryId: string) {
     try {
@@ -139,28 +263,91 @@ export function useEntries() {
       parent = { id: parentSnap.id, ...parentData }
     }
 
-    await setDoc(docRef, {
+    const thread = threadFieldsForNewEntry(docRef.id, parent)
+    const batch = writeBatch(db.value)
+    batch.set(docRef, {
       userId: user.value.uid,
       contentJson: payload.contentJson,
       contentText: payload.contentText,
       tags: payload.tags,
       ...(payload.widgets?.length ? { widgets: payload.widgets } : {}),
-      ...threadFieldsForNewEntry(docRef.id, parent),
+      ...thread,
+      ...(thread.parentId ? {} : { replyCount: 0 }),
       createdAt: serverTimestamp(),
     })
+    if (parent) {
+      batch.update(doc(db.value, 'entries', thread.rootId), { replyCount: increment(1) })
+    }
+    await batch.commit()
+
+    const createdSnap = await getDoc(docRef)
+    if (createdSnap.exists()) {
+      const created = mapEntryDoc(docRef.id, createdSnap.data() as EntrySnapshot)
+      putEntries([created])
+      if (!created.parentId) {
+        if (!rootIds.value.includes(created.id)) {
+          rootIds.value = [created.id, ...rootIds.value]
+        }
+      } else {
+        const root = byId.value[created.rootId]
+        if (root) {
+          byId.value = {
+            ...byId.value,
+            [root.id]: { ...root, replyCount: root.replyCount + 1 },
+          }
+        }
+      }
+    }
+    hasEntries.value = true
 
     await indexEntryAfterWrite(docRef.id)
     return docRef.id
   }
 
+  function applyDeleteToCache(res: DeleteEntryResult, entryId: string) {
+    if (res.result === 'tombstoned') {
+      const existing = byId.value[entryId]
+      if (existing) {
+        byId.value = {
+          ...byId.value,
+          [entryId]: {
+            ...existing,
+            deleted: true,
+            contentText: '',
+            contentJson: JSON.stringify({ type: 'doc', content: [{ type: 'paragraph' }] }),
+            tags: [],
+            widgets: undefined,
+          },
+        }
+      }
+      return
+    }
+
+    const gone = new Set(res.deletedIds.length ? res.deletedIds : [entryId])
+    const next = { ...byId.value }
+    for (const id of gone) delete next[id]
+    const root = next[res.rootId]
+    if (root) {
+      const dec = [...gone].filter((id) => id !== res.rootId).length
+      next[res.rootId] = { ...root, replyCount: Math.max(0, root.replyCount - dec) }
+    }
+    byId.value = next
+    rootIds.value = rootIds.value.filter((id) => !gone.has(id))
+    if (!rootIds.value.length && !hasMoreRoots.value && !Object.keys(byId.value).length) {
+      hasEntries.value = false
+    }
+  }
+
   /** Hard-deletes a leaf entry; entries with replies become "[deleted]" placeholders. */
   async function deleteEntry(entryId: string) {
     const headers = await authHeaders()
-    return await $fetch<{ result: 'deleted' | 'tombstoned' }>('/api/entries/delete', {
+    const res = await $fetch<DeleteEntryResult>('/api/entries/delete', {
       method: 'POST',
       body: { entryId },
       headers,
     })
+    applyDeleteToCache(res, entryId)
+    return { result: res.result }
   }
 
   async function hasExistingImport(source: string, externalId: string): Promise<boolean> {
@@ -197,6 +384,7 @@ export function useEntries() {
       ...(payload.widgets?.length ? { widgets: payload.widgets } : {}),
       ...(payload.importMeta ? { importMeta: payload.importMeta } : {}),
       ...threadFieldsForNewEntry(docRef.id, null),
+      replyCount: 0,
     })
     await indexEntryAfterWrite(docRef.id)
   }
@@ -254,13 +442,31 @@ export function useEntries() {
       if (i < total - 1 && throttleMs > 0) await sleep(throttleMs)
     }
 
+    if (!dryRun && imported > 0) {
+      invalidateTimeline()
+      hasEntries.value = true
+    }
+
     return { imported, skippedDuplicate, failed, errors, dryRun }
   }
 
   return {
+    byId,
+    roots,
     entries,
-    loaded,
     ready,
+    hasEntries,
+    hasMoreRoots,
+    timelineLoaded,
+    timelineLoading,
+    loadingMore,
+    loadedThreads,
+    threadLoading,
+    ensureTimeline,
+    loadMoreRoots,
+    loadThread,
+    fetchEntry,
+    checkHasEntries,
     addEntry,
     deleteEntry,
     addImportedEntry,

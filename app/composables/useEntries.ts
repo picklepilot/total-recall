@@ -1,12 +1,14 @@
 import {
-  addDoc,
   collection,
+  doc,
+  getDoc,
   getDocs,
   limit,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
+  setDoc,
   Timestamp,
   where,
   type Firestore,
@@ -15,6 +17,7 @@ import type { User } from 'firebase/auth'
 import type { EntryDoc, EntryView, EntryWidget, ImportMeta, LinkPreview } from '@/types/entry'
 import type { EntryImportDraft } from '~~/shared/import/types'
 import { coalesceEntryWidgetsWithLegacyLink } from '~~/shared/entryWidgetsNormalize'
+import { normalizeThreadFields, threadFieldsForNewEntry } from '~~/shared/entryThreads'
 
 /** Firestore rows may include legacy `url` / `linkPreview` before link widgets. */
 type EntrySnapshot = EntryDoc & { url?: string | null; linkPreview?: LinkPreview | null }
@@ -35,6 +38,8 @@ function mapDoc(id: string, data: EntrySnapshot): EntryView {
     createdAt: created,
     widgets: merged.length ? merged : undefined,
     importMeta: data.importMeta,
+    ...normalizeThreadFields(id, data),
+    deleted: Boolean(data.deleted),
   }
 }
 
@@ -56,6 +61,8 @@ export function useEntries() {
   const ready = computed(() => Boolean(nuxtApp.$firebaseReady && db.value && user.value))
 
   const entries = ref<EntryView[]>([])
+  /** True once the first snapshot has arrived (distinguishes "loading" from "no entries"). */
+  const loaded = ref(false)
   let unsub: (() => void) | null = null
 
   function subscribe() {
@@ -74,6 +81,7 @@ export function useEntries() {
         if (d.userId === uid) list.push(mapDoc(doc.id, d))
       })
       entries.value = list
+      loaded.value = true
     })
   }
 
@@ -85,6 +93,7 @@ export function useEntries() {
         unsub?.()
         unsub = null
         entries.value = []
+        loaded.value = false
       }
     },
     { immediate: true },
@@ -108,26 +117,50 @@ export function useEntries() {
     }
   }
 
+  /** Saves a new entry, optionally as a reply to `parentId`. Returns the new entry id. */
   async function addEntry(payload: {
     contentJson: string
     contentText: string
     tags: string[]
     widgets?: EntryWidget[]
-  }) {
+    parentId?: string | null
+  }): Promise<string> {
     if (!db.value || !user.value) {
       throw new Error('Sign in with Google to save entries.')
     }
-    const ref = collection(db.value, 'entries')
-    const docRef = await addDoc(ref, {
+    const docRef = doc(collection(db.value, 'entries'))
+
+    let parent: ({ id: string } & EntrySnapshot) | null = null
+    if (payload.parentId) {
+      const parentSnap = await getDoc(doc(db.value, 'entries', payload.parentId))
+      if (!parentSnap.exists()) throw new Error('The entry you are replying to no longer exists.')
+      const parentData = parentSnap.data() as EntrySnapshot
+      if (parentData.deleted) throw new Error('You cannot continue a deleted entry.')
+      parent = { id: parentSnap.id, ...parentData }
+    }
+
+    await setDoc(docRef, {
       userId: user.value.uid,
       contentJson: payload.contentJson,
       contentText: payload.contentText,
       tags: payload.tags,
       ...(payload.widgets?.length ? { widgets: payload.widgets } : {}),
+      ...threadFieldsForNewEntry(docRef.id, parent),
       createdAt: serverTimestamp(),
     })
 
     await indexEntryAfterWrite(docRef.id)
+    return docRef.id
+  }
+
+  /** Hard-deletes a leaf entry; entries with replies become "[deleted]" placeholders. */
+  async function deleteEntry(entryId: string) {
+    const headers = await authHeaders()
+    return await $fetch<{ result: 'deleted' | 'tombstoned' }>('/api/entries/delete', {
+      method: 'POST',
+      body: { entryId },
+      headers,
+    })
   }
 
   async function hasExistingImport(source: string, externalId: string): Promise<boolean> {
@@ -154,8 +187,8 @@ export function useEntries() {
     if (!db.value || !user.value) {
       throw new Error('Sign in with Google to save entries.')
     }
-    const ref = collection(db.value, 'entries')
-    const docRef = await addDoc(ref, {
+    const docRef = doc(collection(db.value, 'entries'))
+    await setDoc(docRef, {
       userId: user.value.uid,
       contentJson: payload.contentJson,
       contentText: payload.contentText,
@@ -163,6 +196,7 @@ export function useEntries() {
       createdAt: Timestamp.fromDate(payload.createdAt),
       ...(payload.widgets?.length ? { widgets: payload.widgets } : {}),
       ...(payload.importMeta ? { importMeta: payload.importMeta } : {}),
+      ...threadFieldsForNewEntry(docRef.id, null),
     })
     await indexEntryAfterWrite(docRef.id)
   }
@@ -223,5 +257,14 @@ export function useEntries() {
     return { imported, skippedDuplicate, failed, errors, dryRun }
   }
 
-  return { entries, ready, addEntry, addImportedEntry, importDrafts, hasExistingImport }
+  return {
+    entries,
+    loaded,
+    ready,
+    addEntry,
+    deleteEntry,
+    addImportedEntry,
+    importDrafts,
+    hasExistingImport,
+  }
 }

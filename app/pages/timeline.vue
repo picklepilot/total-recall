@@ -1,23 +1,25 @@
 <script setup lang="ts">
-import { parseEntryDoc } from '@/lib/tiptapShared'
-import { partitionEntryWidgets } from '@/lib/entry-widgets/partitionWidgets'
+import { ChevronDown } from 'lucide-vue-next'
 import type { EntryView } from '@/types/entry'
+import { buildThreadIndex, countDescendants } from '~~/shared/entryThreads'
 
 const firebaseConfigured = useFirebaseUiReady()
-const { entries } = useEntries()
+const { entries, deleteEntry } = useEntries()
 const { signedIn } = useAuth()
+const { confirmAndDelete } = useEntryDeletion(deleteEntry)
 
-function formatDay(d: Date) {
-  return d.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
+const threads = computed(() => buildThreadIndex(entries.value))
+
+const expanded = ref(new Set<string>())
+function toggleThread(id: string) {
+  const next = new Set(expanded.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  expanded.value = next
 }
 
-function splitTimelineWidgets(entry: EntryView) {
-  return partitionEntryWidgets(entry.widgets)
+function onDelete(entry: EntryView) {
+  confirmAndDelete(entry, Boolean(threads.value.childrenOf.get(entry.id)?.length))
 }
 </script>
 
@@ -66,51 +68,44 @@ function splitTimelineWidgets(entry: EntryView) {
     </div>
 
     <div v-else class="space-y-5">
-      <article
-        v-for="item in entries"
+      <section
+        v-for="item in threads.roots"
         :key="item.id"
-        class="rounded-xl border border-border/70 bg-card/40 px-5 py-4"
+        class="space-y-3"
       >
-        <div
-          class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
-        >
-          <time :datetime="item.createdAt.toISOString()">{{
-            formatDay(item.createdAt)
-          }}</time>
-          <template v-if="item.tags.length">
-            <span v-for="t in item.tags" :key="t">
-              <Badge variant="secondary" class="font-normal">{{ t }}</Badge>
-            </span>
+        <EntryCard :entry="item" @delete="onDelete">
+          <template
+            v-if="threads.childrenOf.get(item.id)?.length"
+            #footer
+          >
+            <button
+              type="button"
+              class="inline-flex items-center gap-1 font-medium text-muted-foreground transition-colors hover:text-foreground"
+              :aria-expanded="expanded.has(item.id)"
+              @click="toggleThread(item.id)"
+            >
+              <ChevronDown
+                class="size-3.5 transition-transform"
+                :class="expanded.has(item.id) ? '' : '-rotate-90'"
+                aria-hidden="true"
+              />
+              {{ countDescendants(item.id, threads.childrenOf) }}
+              {{
+                countDescendants(item.id, threads.childrenOf) === 1
+                  ? 'reply'
+                  : 'replies'
+              }}
+            </button>
           </template>
-        </div>
-        <EntryWidgets
-          v-if="splitTimelineWidgets(item).withoutLink.length"
-          :widgets="splitTimelineWidgets(item).withoutLink"
-          class="mt-2"
+        </EntryCard>
+        <EntryThreadBranch
+          v-if="expanded.has(item.id)"
+          :parent-id="item.id"
+          :children-of="threads.childrenOf"
+          class="ml-3 sm:ml-5"
+          @delete="onDelete"
         />
-        <div v-if="item.contentText.trim()" class="mt-3">
-          <ClientOnly>
-            <EntryBodyTiptap
-              v-if="parseEntryDoc(item.contentJson)"
-              :content-json="item.contentJson"
-            />
-            <p v-else class="whitespace-pre-wrap text-sm leading-relaxed">
-              {{ item.contentText.trim() }}
-            </p>
-            <template #fallback>
-              <p class="whitespace-pre-wrap text-sm leading-relaxed">
-                {{ item.contentText.trim() }}
-              </p>
-            </template>
-          </ClientOnly>
-        </div>
-        <EntryWidgets
-          v-if="splitTimelineWidgets(item).linksOnly.length"
-          :widgets="splitTimelineWidgets(item).linksOnly"
-          class="mt-3 text-sm"
-        />
-      </article>
+      </section>
     </div>
-
   </div>
 </template>

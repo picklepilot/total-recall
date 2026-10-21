@@ -41,12 +41,26 @@ export interface EntryDoc {
   /** Structured fields (link, ratings, etc.). */
   widgets?: EntryWidget[]
   importMeta?: ImportMeta
+  /** Thread fields; absent on entries saved before threading (treated as top-level). */
+  parentId?: string | null
+  rootId?: string
+  /** Ordered path from the thread root to the direct parent. */
+  ancestorIds?: string[]
+  depth?: number
+  /** Set by server when an entry with replies is deleted; content is cleared. */
+  deleted?: boolean
   /** Set by server (`/api/entries/index`) for Firestore vector search — not writable by clients. */
   embedModel?: string
   embeddedAt?: Timestamp
 }
 
-export interface EntryView extends Omit<EntryDoc, 'createdAt'> {
+export interface EntryView
+  extends Omit<EntryDoc, 'createdAt' | 'parentId' | 'rootId' | 'ancestorIds' | 'depth' | 'deleted'> {
   id: string
   createdAt: Date
+  parentId: string | null
+  rootId: string
+  ancestorIds: string[]
+  depth: number
+  deleted: boolean
 }

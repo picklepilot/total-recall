@@ -2,6 +2,7 @@
 import {
   AlertCircle,
   CheckCircle2,
+  CornerDownRight,
   Hash,
   KeyRound,
   Link2,
@@ -14,6 +15,7 @@ import ComposeStarRatingField from "@/components/entry-compose/ComposeStarRating
 import ComposeLinkField from "@/components/entry-compose/ComposeLinkField.vue";
 import ComposeAttachmentToggles from "@/components/entry-compose/ComposeAttachmentToggles.vue";
 import { buildWidgetsFromComposeForm } from "@/lib/entry-compose/buildWidgetsFromForm";
+import { entrySnippet } from "@/lib/entrySnippet";
 import {
   TagsInput,
   TagsInputInput,
@@ -23,10 +25,26 @@ import {
 } from "@/components/ui/tags-input";
 
 const nuxtApp = useNuxtApp();
-const { ready, addEntry } = useEntries();
+const route = useRoute();
+const router = useRouter();
+const { entries, ready, addEntry } = useEntries();
 const { signedIn, signInWithGoogle } = useAuth();
 
 const firebaseConfigured = useFirebaseUiReady();
+
+/** Set via `/?parent=<id>` when continuing a thread. */
+const parentId = computed(() =>
+  typeof route.query.parent === "string" && route.query.parent
+    ? route.query.parent
+    : null,
+);
+const parentEntry = computed(() =>
+  parentId.value ? entries.value.find((e) => e.id === parentId.value) : undefined,
+);
+
+function clearParent() {
+  router.replace({ query: { ...route.query, parent: undefined } });
+}
 
 const feedback = ref<{ type: "ok" | "err"; text: string } | null>(null);
 let feedbackTimer: ReturnType<typeof setTimeout> | undefined;
@@ -138,7 +156,8 @@ async function onSubmit() {
   }
   submitting.value = true;
   try {
-    await addEntry({
+    const newId = await addEntry({
+      parentId: parentId.value,
       contentJson: contentJson.value,
       contentText: contentText.value,
       tags: tagsModel.value.map((t) => t.trim().toLowerCase()).filter(Boolean),
@@ -152,6 +171,10 @@ async function onSubmit() {
           : null,
       }),
     });
+    if (parentId.value) {
+      await router.push(`/entries/${newId}`);
+      return;
+    }
     showFeedback("ok", "Saved to your log");
     composeLinkUrl.value = "";
     composeLinkPreview.value = null;
@@ -242,6 +265,30 @@ async function onSubmit() {
       class="glass-panel my-auto overflow-hidden rounded-3xl"
       @submit.prevent="onSubmit"
     >
+      <div
+        v-if="parentId"
+        class="flex items-center gap-2 border-b border-foreground/[0.06] px-5 py-2.5 text-sm"
+      >
+        <CornerDownRight
+          class="size-4 shrink-0 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <span class="shrink-0 text-muted-foreground">Continuing</span>
+        <NuxtLink
+          :to="`/entries/${parentId}`"
+          class="min-w-0 flex-1 truncate font-medium hover:underline underline-offset-4"
+        >
+          {{ parentEntry ? entrySnippet(parentEntry) : "an earlier entry" }}
+        </NuxtLink>
+        <button
+          type="button"
+          class="-m-1.5 grid size-8 shrink-0 touch-manipulation place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/70 hover:text-foreground dark:hover:bg-white/10"
+          aria-label="Start a new entry instead"
+          @click="clearParent"
+        >
+          <X class="size-4" />
+        </button>
+      </div>
       <ClientOnly>
         <MediumEditor
           ref="editorRef"

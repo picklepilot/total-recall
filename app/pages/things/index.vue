@@ -7,7 +7,8 @@ useHead({ title: "Things — Total Recall" });
 const router = useRouter();
 const firebaseConfigured = useFirebaseUiReady();
 const { signedIn } = useAuth();
-const { things, ready, loaded, loading, loadError, ensureThings, createThing } = useThings();
+const { things, ready, loaded, loading, loadError, ensureThings, createThing, deleteThing } =
+  useThings();
 
 const search = ref("");
 const kindFilter = ref("");
@@ -17,6 +18,9 @@ const kind = ref(DEFAULT_THING_KIND);
 const adding = ref(false);
 const addError = ref("");
 const nameInput = ref<HTMLInputElement | null>(null);
+const openId = ref<string | null>(null);
+const deletingId = ref<string | null>(null);
+const deleteError = ref("");
 
 watch(
   [ready, signedIn],
@@ -34,6 +38,29 @@ const filtered = computed(() => {
     return true;
   });
 });
+
+watch(filtered, (list) => {
+  if (openId.value && !list.some((thing) => thing.id === openId.value)) openId.value = null;
+});
+
+function setRowOpen(id: string, open: boolean) {
+  openId.value = open ? id : openId.value === id ? null : openId.value;
+}
+
+async function onDelete(thingId: string) {
+  if (deletingId.value) return;
+  if (!window.confirm("Delete this thing? Entries stay, but they will no longer link to it.")) return;
+  deletingId.value = thingId;
+  deleteError.value = "";
+  try {
+    await deleteThing(thingId);
+    if (openId.value === thingId) openId.value = null;
+  } catch (e) {
+    deleteError.value = e instanceof Error ? e.message : "Could not delete that thing.";
+  } finally {
+    deletingId.value = null;
+  }
+}
 
 function startAdd() {
   composing.value = true;
@@ -199,20 +226,33 @@ async function submitAdd() {
         >
           No things match.
         </p>
+        <p v-else-if="deleteError" class="mb-3 px-4 text-center text-sm text-destructive">
+          {{ deleteError }}
+        </p>
         <ol
-          v-else
-          class="divide-y divide-foreground/[0.06] overflow-hidden rounded-3xl border border-foreground/[0.06] bg-card/70 shadow-sm dark:divide-white/[0.06] dark:border-white/10 dark:bg-white/[0.04]"
+          v-if="filtered.length"
+          class="overflow-hidden rounded-3xl border border-foreground/[0.06] bg-card/70 shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
         >
-          <li v-for="thing in filtered" :key="thing.id">
+          <ThingSwipeRow
+            v-for="thing in filtered"
+            :key="thing.id"
+            :open="openId === thing.id"
+            :busy="deletingId === thing.id"
+            :delete-label="`Delete ${thing.name}`"
+            @update:open="setRowOpen(thing.id, $event)"
+            @delete="onDelete(thing.id)"
+          >
             <NuxtLink
               :to="`/things/${thing.id}`"
               class="flex items-center gap-3 px-4 py-3 transition-colors hover:bg-foreground/[0.03] sm:px-5"
+              draggable="false"
             >
               <img
                 v-if="thing.imageUrl"
                 :src="thing.imageUrl"
                 alt=""
                 class="size-12 shrink-0 rounded-xl object-cover"
+                draggable="false"
               />
               <span
                 v-else
@@ -228,7 +268,7 @@ async function submitAdd() {
                 </span>
               </span>
             </NuxtLink>
-          </li>
+          </ThingSwipeRow>
         </ol>
       </template>
     </template>

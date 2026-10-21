@@ -4,13 +4,42 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase-admin/firestore'
 import { embedText } from './geminiEmbedding'
-import { formatEntryDocForPrompt } from './formatEntryForPrompt'
+import { formatEntryDocForPrompt, formatThreadSnippet } from './formatEntryForPrompt'
 
 const VECTOR_LIMIT = 16
 const FALLBACK_LIMIT = 40
+/** Nearest ancestors included per entry; keeps deep threads from flooding the prompt. */
+const MAX_THREAD_ANCESTORS = 6
 
-function docToLine(doc: QueryDocumentSnapshot): string {
-  return formatEntryDocForPrompt(doc.id, doc.data() as Record<string, unknown>)
+function ancestorIdsOf(doc: QueryDocumentSnapshot): string[] {
+  const ids = doc.get('ancestorIds')
+  return Array.isArray(ids) ? (ids as string[]).slice(-MAX_THREAD_ANCESTORS) : []
+}
+
+/** Formats entries with the snippets of their thread ancestors (fetched in one batch). */
+async function docsToLines(
+  db: Firestore,
+  uid: string,
+  docs: QueryDocumentSnapshot[],
+): Promise<string> {
+  const live = docs.filter((d) => !d.get('deleted'))
+  const ancestorIds = [...new Set(live.flatMap(ancestorIdsOf))]
+
+  const ancestors = new Map<string, Record<string, unknown>>()
+  if (ancestorIds.length) {
+    const snaps = await db.getAll(...ancestorIds.map((id) => db.collection('entries').doc(id)))
+    for (const s of snaps) {
+      const data = s.data()
+      if (data && data.userId === uid) ancestors.set(s.id, data)
+    }
+  }
+
+  return live
+    .map((doc) => {
+      const path = ancestorIdsOf(doc).map((id) => formatThreadSnippet(ancestors.get(id)))
+      return formatEntryDocForPrompt(doc.id, doc.data() as Record<string, unknown>, path)
+    })
+    .join('\n')
 }
 
 /**
@@ -46,8 +75,7 @@ export async function buildMemoryContextForQuestion(
       .get()
 
     if (!vectorSnap.empty) {
-      const lines = vectorSnap.docs.map(docToLine)
-      return lines.join('\n')
+      return await docsToLines(db, uid, vectorSnap.docs)
     }
   } catch (e) {
     console.warn('[total-recall] vector retrieval failed, using recent entries:', e)
@@ -65,5 +93,5 @@ async function fallbackLines(db: Firestore, uid: string): Promise<string> {
     .get()
 
   if (snap.empty) return ''
-  return snap.docs.map(docToLine).join('\n')
+  return await docsToLines(db, uid, snap.docs)
 }

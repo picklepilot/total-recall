@@ -3,17 +3,46 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /entries/{entryId} {
+      // Must match MAX_THREAD_DEPTH in shared/entryThreads.ts.
+      function maxThreadDepth() {
+        return 64;
+      }
+
+      function isTopLevel(d) {
+        return d.parentId == null
+          && d.rootId == entryId
+          && d.ancestorIds == []
+          && d.depth == 0;
+      }
+
+      // Parents saved before threading have no thread fields and are top-level.
+      function isValidReply(d) {
+        let parent = get(/databases/$(database)/documents/entries/$(d.parentId)).data;
+        return d.parentId is string
+          && parent.userId == request.auth.uid
+          && parent.get('deleted', false) == false
+          && d.rootId == parent.get('rootId', d.parentId)
+          && d.ancestorIds == parent.get('ancestorIds', []).concat([d.parentId])
+          && d.depth == parent.get('depth', 0) + 1
+          && d.depth <= maxThreadDepth();
+      }
+
       allow read: if request.auth != null && request.auth.uid == resource.data.userId;
       allow create: if request.auth != null
         && request.resource.data.userId == request.auth.uid
         && request.resource.data.keys().hasAll([
-          'userId', 'contentJson', 'contentText', 'tags', 'createdAt'
+          'userId', 'contentJson', 'contentText', 'tags', 'createdAt',
+          'parentId', 'rootId', 'ancestorIds', 'depth'
         ])
-        && !request.resource.data.keys().hasAny(['embedding']);
-      // Clients cannot change server-managed vector field; Admin SDK bypasses these rules.
+        && !request.resource.data.keys().hasAny(['embedding', 'deleted'])
+        && (isTopLevel(request.resource.data) || isValidReply(request.resource.data));
+      // Clients cannot change server-managed or thread fields; Admin SDK bypasses these rules.
       allow update: if request.auth != null && request.auth.uid == resource.data.userId
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['embedding']);
-      allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+          'embedding', 'userId', 'parentId', 'rootId', 'ancestorIds', 'depth', 'deleted'
+        ]);
+      // Deletes go through /api/entries/delete so replies are never orphaned.
+      allow delete: if false;
     }
   }
 }

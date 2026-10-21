@@ -3,7 +3,7 @@ import { formatEntryWidgetsPlain } from '~~/shared/entryWidgetsPlain'
 
 /** Flattens recent entries into a single string for the chat API (RAG-style context). */
 export function entriesToMemoryContext(entries: EntryView[], maxEntries = 80): string {
-  const slice = entries.slice(0, maxEntries)
+  const slice = entries.filter((e) => !e.deleted).slice(0, maxEntries)
   if (!slice.length) return ''
 
   const lines = slice.map((e) => {

@@ -1,6 +1,14 @@
 <script setup lang="ts">
-import { Download, History, LogOut, Moon, PenLine, Sparkles, Sun } from 'lucide-vue-next'
-import { useDark } from '@vueuse/core'
+import {
+  Download,
+  History,
+  LogOut,
+  Moon,
+  PenLine,
+  Sparkles,
+  Sun,
+} from "lucide-vue-next";
+import { useDark } from "@vueuse/core";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -8,65 +16,82 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
+} from "@/components/ui/dropdown-menu";
 
-const route = useRoute()
-const { user, signedIn, signInWithGoogle, logout } = useAuth()
+const route = useRoute();
+const { user, signedIn, signInWithGoogle, logout } = useAuth();
 
-const firebaseConfigured = useFirebaseUiReady()
+const firebaseConfigured = useFirebaseUiReady();
 
-const isDark = useDark({ storageKey: 'total-recall-color-scheme' })
+const isDark = useDark({ storageKey: "total-recall-color-scheme" });
 
 function toggleColorMode() {
-  isDark.value = !isDark.value
+  isDark.value = !isDark.value;
 }
 
 const navItems = [
-  { to: '/', label: 'Add', icon: PenLine },
-  { to: '/timeline', label: 'Timeline', icon: History },
-  { to: '/ask', label: 'Ask', icon: Sparkles },
-  { to: '/import', label: 'Import', icon: Download },
-]
+  { to: "/", label: "Add", icon: PenLine },
+  { to: "/timeline", label: "Timeline", icon: History },
+  { to: "/ask", label: "Ask", icon: Sparkles },
+  { to: "/import", label: "Import", icon: Download },
+];
 
-const userInitial = computed(() => (user.value?.displayName || user.value?.email || '?').charAt(0).toUpperCase())
+const userInitial = computed(() =>
+  (user.value?.displayName || user.value?.email || "?").charAt(0).toUpperCase(),
+);
 
-const signingIn = ref(false)
+const signingIn = ref(false);
 async function onSignIn() {
-  signingIn.value = true
+  signingIn.value = true;
   try {
-    await signInWithGoogle()
+    await signInWithGoogle();
   } catch (e) {
-    console.error(e)
+    console.error(e);
   } finally {
-    signingIn.value = false
+    signingIn.value = false;
   }
 }
 </script>
 
 <template>
-  <div class="relative isolate min-h-dvh text-foreground">
-    <div class="mesh-bg pointer-events-none fixed inset-0 -z-10" aria-hidden="true" />
+  <div class="relative isolate flex min-h-dvh flex-col text-foreground">
+    <div
+      class="mesh-bg pointer-events-none fixed inset-0 -z-10"
+      aria-hidden="true"
+    />
     <header
-      class="sticky top-0 z-20 border-b border-border/50 bg-background/55 pt-[env(safe-area-inset-top)] backdrop-blur-xl"
+      class="sticky top-0 z-20 pt-[env(safe-area-inset-top)] backdrop-blur-xl"
     >
-      <div class="mx-auto flex h-14 max-w-3xl items-center justify-between gap-3 px-5">
-        <NuxtLink to="/" class="flex items-center gap-2 text-[0.95rem] font-semibold tracking-tight">
+      <div
+        class="mx-auto flex h-24 sm:h-14 max-w-3xl items-center justify-between gap-3 px-8 sm:px-5"
+      >
+        <NuxtLink
+          to="/"
+          class="flex items-center gap-2 text-[0.95rem] font-semibold tracking-tight"
+        >
           <span
-            class="grid size-7 place-items-center rounded-lg bg-foreground text-background"
+            class="grid size-7 place-items-center rounded-full bg-foreground text-background"
             aria-hidden="true"
           >
             <span class="text-[0.7rem] font-bold leading-none">TR</span>
           </span>
-          Total Recall
+          <span class="sr-only">Total Recall</span>
         </NuxtLink>
 
-        <nav class="hidden items-center gap-1 text-sm sm:flex" aria-label="Main">
+        <nav
+          class="hidden items-center gap-1 text-sm sm:flex"
+          aria-label="Main"
+        >
           <NuxtLink
             v-for="item in navItems"
             :key="item.to"
             :to="item.to"
             class="rounded-full px-3 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
-            :class="route.path === item.to ? 'bg-muted font-medium text-foreground' : ''"
+            :class="
+              route.path === item.to
+                ? 'bg-muted font-medium text-foreground'
+                : ''
+            "
           >
             {{ item.label }}
           </NuxtLink>
@@ -78,7 +103,9 @@ async function onSignIn() {
               variant="ghost"
               size="icon"
               class="rounded-full text-muted-foreground hover:text-foreground"
-              :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+              :aria-label="
+                isDark ? 'Switch to light mode' : 'Switch to dark mode'
+              "
               @click="toggleColorMode"
             >
               <Sun v-if="isDark" class="size-4" />
@@ -105,10 +132,17 @@ async function onSignIn() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" class="w-56">
               <DropdownMenuLabel class="flex flex-col gap-0.5 font-normal">
-                <span v-if="user.displayName" class="truncate text-sm font-medium text-foreground">
+                <span
+                  v-if="user.displayName"
+                  class="truncate text-sm font-medium text-foreground"
+                >
                   {{ user.displayName }}
                 </span>
-                <span v-if="user.email" class="truncate text-xs text-muted-foreground">{{ user.email }}</span>
+                <span
+                  v-if="user.email"
+                  class="truncate text-xs text-muted-foreground"
+                  >{{ user.email }}</span
+                >
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem @select="logout()">
@@ -124,14 +158,14 @@ async function onSignIn() {
             :disabled="signingIn"
             @click="onSignIn"
           >
-            {{ signingIn ? 'Signing in…' : 'Sign in' }}
+            {{ signingIn ? "Signing in…" : "Sign in" }}
           </Button>
         </div>
       </div>
     </header>
 
     <main
-      class="mx-auto max-w-3xl px-4 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-10 sm:pb-16"
+      class="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-5 sm:pt-10 sm:pb-16"
     >
       <slot />
     </main>
@@ -146,13 +180,19 @@ async function onSignIn() {
           :key="item.to"
           :to="item.to"
           class="flex touch-manipulation flex-col items-center justify-center gap-1 text-[0.7rem] font-medium transition-colors"
-          :class="route.path === item.to ? 'text-foreground' : 'text-muted-foreground'"
+          :class="
+            route.path === item.to ? 'text-foreground' : 'text-muted-foreground'
+          "
         >
           <span
             class="grid h-7 w-12 place-items-center rounded-full transition-colors"
             :class="route.path === item.to ? 'bg-muted' : ''"
           >
-            <component :is="item.icon" class="size-[1.15rem]" :stroke-width="route.path === item.to ? 2.25 : 1.75" />
+            <component
+              :is="item.icon"
+              class="size-[1.15rem]"
+              :stroke-width="route.path === item.to ? 2.25 : 1.75"
+            />
           </span>
           {{ item.label }}
         </NuxtLink>

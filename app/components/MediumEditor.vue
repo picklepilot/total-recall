@@ -54,8 +54,8 @@ const editor = useEditor({
   editorProps: {
     attributes: {
       class: props.bare
-        ? 'medium-editor-tiptap min-h-[11rem] px-5 pt-5 pb-3 text-base leading-relaxed text-foreground [overflow-wrap:anywhere] focus:outline-none sm:min-h-[13rem]'
-        : 'medium-editor-tiptap min-h-[220px] px-4 py-3 text-base leading-relaxed text-foreground [overflow-wrap:anywhere] focus:outline-none sm:text-sm',
+        ? 'medium-editor-tiptap min-h-[11rem] max-h-[45dvh] overflow-y-auto overscroll-contain px-5 pt-5 pb-3 text-base leading-relaxed text-foreground [overflow-wrap:anywhere] focus:outline-none sm:min-h-[13rem] sm:max-h-[28rem]'
+        : 'medium-editor-tiptap min-h-[220px] max-h-[60dvh] overflow-y-auto overscroll-contain px-4 py-3 text-base leading-relaxed text-foreground [overflow-wrap:anywhere] focus:outline-none sm:text-sm',
     },
     handleKeyDown(view, event) {
       const ed = editor.value

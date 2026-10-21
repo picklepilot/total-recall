@@ -26,12 +26,21 @@ const props = withDefaults(
     flush?: boolean;
     /** Show only the time of day (the parent already shows the date). */
     timeOnly?: boolean;
+    /** Reply stays on this page and lifts the composer over the list. */
+    replyInPlace?: boolean;
   }>(),
-  { nested: false, highlighted: false, flush: false, timeOnly: false },
+  {
+    nested: false,
+    highlighted: false,
+    flush: false,
+    timeOnly: false,
+    replyInPlace: false,
+  },
 );
 
 const emit = defineEmits<{
   delete: [entry: EntryView];
+  reply: [entry: EntryView];
 }>();
 
 const widgets = computed(() => partitionEntryWidgets(props.entry.widgets));
@@ -148,8 +157,18 @@ const timeLabel = computed(() => {
       v-if="!entry.deleted || $slots.footer"
       class="mt-2 -mb-1 -ml-2.5 flex flex-wrap items-center gap-1 text-xs"
     >
+      <button
+        v-if="!entry.deleted && replyInPlace"
+        type="button"
+        :data-reply-for="entry.id"
+        class="inline-flex h-8 touch-manipulation items-center gap-1.5 rounded-full px-2.5 font-medium text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+        @click="emit('reply', entry)"
+      >
+        <CornerDownRight class="size-3.5" aria-hidden="true" />
+        Reply
+      </button>
       <NuxtLink
-        v-if="!entry.deleted"
+        v-else-if="!entry.deleted"
         :to="{ path: '/', query: { parent: entry.id } }"
         class="inline-flex h-8 touch-manipulation items-center gap-1.5 rounded-full px-2.5 font-medium text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
       >

@@ -7,14 +7,14 @@ import {
   LockKeyhole,
   PenLine,
   Sparkles,
-} from 'lucide-vue-next'
-import { useIntersectionObserver } from '@vueuse/core'
-import type { EntryView } from '@/types/entry'
-import { buildThreadIndex } from '~~/shared/entryThreads'
+} from "lucide-vue-next";
+import { useIntersectionObserver } from "@vueuse/core";
+import type { EntryView } from "@/types/entry";
+import { buildThreadIndex } from "~~/shared/entryThreads";
 
-useHead({ title: 'Timeline — Total Recall' })
+useHead({ title: "Timeline — Total Recall" });
 
-const firebaseConfigured = useFirebaseUiReady()
+const firebaseConfigured = useFirebaseUiReady();
 const {
   byId,
   roots,
@@ -29,94 +29,115 @@ const {
   loadMoreRoots,
   loadThread,
   deleteEntry,
-} = useEntries()
-const { signedIn } = useAuth()
-const { confirmAndDelete } = useEntryDeletion(deleteEntry)
+} = useEntries();
+const { signedIn } = useAuth();
+const { confirmAndDelete } = useEntryDeletion(deleteEntry);
 
-const threads = computed(() => buildThreadIndex(Object.values(byId.value)))
+const threads = computed(() => buildThreadIndex(Object.values(byId.value)));
 
 watch(
   [ready, signedIn],
   ([ok, in_]) => {
-    if (ok && in_) ensureTimeline()
+    if (ok && in_) ensureTimeline();
   },
   { immediate: true },
-)
+);
 
-const loadMoreEl = ref<HTMLElement | null>(null)
+const loadMoreEl = ref<HTMLElement | null>(null);
 useIntersectionObserver(loadMoreEl, ([entry]) => {
-  if (entry?.isIntersecting) loadMoreRoots()
-})
+  if (entry?.isIntersecting) loadMoreRoots();
+});
 
 function startOfDay(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
 }
 
 function dayLabel(day: Date, today: Date) {
-  const daysAgo = Math.round((today.getTime() - day.getTime()) / 86_400_000)
-  if (daysAgo === 0) return 'Today'
-  if (daysAgo === 1) return 'Yesterday'
+  const daysAgo = Math.round((today.getTime() - day.getTime()) / 86_400_000);
+  if (daysAgo === 0) return "Today";
+  if (daysAgo === 1) return "Yesterday";
   if (daysAgo > 1 && daysAgo < 7) {
-    return day.toLocaleDateString(undefined, { weekday: 'long' })
+    return day.toLocaleDateString(undefined, { weekday: "long" });
   }
   return day.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    year: day.getFullYear() === today.getFullYear() ? undefined : 'numeric',
-  })
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: day.getFullYear() === today.getFullYear() ? undefined : "numeric",
+  });
 }
 
 const days = computed(() => {
-  const today = startOfDay(new Date())
-  const groups: { key: string; label: string; entries: EntryView[] }[] = []
+  const today = startOfDay(new Date());
+  const groups: { key: string; label: string; entries: EntryView[] }[] = [];
   for (const entry of roots.value) {
-    const day = startOfDay(entry.createdAt)
-    const key = day.toISOString()
-    const last = groups.at(-1)
-    if (last?.key === key) last.entries.push(entry)
-    else groups.push({ key, label: dayLabel(day, today), entries: [entry] })
+    const day = startOfDay(entry.createdAt);
+    const key = day.toISOString();
+    const last = groups.at(-1);
+    if (last?.key === key) last.entries.push(entry);
+    else groups.push({ key, label: dayLabel(day, today), entries: [entry] });
   }
-  return groups
-})
+  return groups;
+});
 
 const entryCountLabel = computed(() => {
-  if (!signedIn.value || !timelineLoaded.value) return 'Your history'
-  return 'Newest first'
-})
+  if (!signedIn.value || !timelineLoaded.value) return "Your history";
+  return "Newest first";
+});
 
-const expanded = ref(new Set<string>())
+const expanded = ref(new Set<string>());
 async function toggleThread(id: string) {
-  const next = new Set(expanded.value)
+  const next = new Set(expanded.value);
   if (next.has(id)) {
-    next.delete(id)
-    expanded.value = next
-    return
+    next.delete(id);
+    expanded.value = next;
+    return;
   }
-  next.add(id)
-  expanded.value = next
-  await loadThread(id)
+  next.add(id);
+  expanded.value = next;
+  await loadThread(id);
 }
 
 function onDelete(entry: EntryView) {
   const hasReplies = entry.parentId
     ? Boolean(threads.value.childrenOf.get(entry.id)?.length)
-    : entry.replyCount > 0
-  confirmAndDelete(entry, hasReplies)
+    : entry.replyCount > 0;
+  confirmAndDelete(entry, hasReplies);
+}
+
+const { replyingTo, openReply, closeReply, onExited } = useReplyComposer({
+  restoreFocus: (id) => {
+    document
+      .querySelector<HTMLElement>(`[data-reply-for="${CSS.escape(id)}"]`)
+      ?.focus();
+  },
+});
+
+function onReplySaved() {
+  const entry = replyingTo.value;
+  if (entry) {
+    const next = new Set(expanded.value);
+    next.add(entry.rootId);
+    expanded.value = next;
+    void loadThread(entry.rootId);
+  }
+  closeReply();
 }
 </script>
 
 <template>
   <div class="mx-auto flex w-full max-w-xl flex-1 flex-col">
-    <header class="mb-5 flex items-end justify-between gap-4 px-4 sm:mb-7 sm:px-1">
+    <header
+      class="mb-5 flex items-end justify-between gap-4 px-4 sm:mb-7 sm:px-1"
+    >
       <div class="min-w-0">
-        <p
+        <!-- <p
           class="h-4 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground"
         >
           {{ entryCountLabel }}
-        </p>
+        </p> -->
         <h1
-          class="mt-2 text-[1.7rem] font-semibold leading-tight tracking-tight sm:text-3xl"
+          class="text-[1.7rem] font-semibold leading-tight tracking-tight sm:text-3xl"
         >
           Timeline
         </h1>
@@ -171,14 +192,22 @@ function onDelete(entry: EntryView) {
       aria-busy="true"
       aria-label="Loading entries"
     >
-      <div class="mb-2 h-7 w-20 animate-pulse rounded-full bg-foreground/[0.06]" />
+      <div
+        class="mb-2 h-7 w-20 animate-pulse rounded-full bg-foreground/[0.06]"
+      />
       <div
         class="divide-y divide-foreground/[0.06] overflow-hidden rounded-3xl border border-foreground/[0.06] bg-card/70 shadow-sm dark:bg-white/[0.04]"
       >
         <div v-for="i in 3" :key="i" class="space-y-2.5 px-4 py-4 sm:px-5">
-          <div class="h-3 w-16 animate-pulse rounded-full bg-foreground/[0.07]" />
-          <div class="h-3.5 w-11/12 animate-pulse rounded-full bg-foreground/[0.07]" />
-          <div class="h-3.5 w-3/5 animate-pulse rounded-full bg-foreground/[0.07]" />
+          <div
+            class="h-3 w-16 animate-pulse rounded-full bg-foreground/[0.07]"
+          />
+          <div
+            class="h-3.5 w-11/12 animate-pulse rounded-full bg-foreground/[0.07]"
+          />
+          <div
+            class="h-3.5 w-3/5 animate-pulse rounded-full bg-foreground/[0.07]"
+          />
         </div>
       </div>
     </div>
@@ -218,7 +247,7 @@ function onDelete(entry: EntryView) {
       >
         <h2
           :id="`day-${day.key}`"
-          class="sticky top-[calc(6.5rem+env(safe-area-inset-top))] z-10 mb-2 flex px-1 sm:top-[calc(4rem+env(safe-area-inset-top))]"
+          class="sticky top-[calc(4.5rem+env(safe-area-inset-top))] z-10 mb-2 flex px-1 sm:top-[calc(4rem+env(safe-area-inset-top))]"
         >
           <span
             class="rounded-full border border-foreground/[0.06] bg-background/80 px-3 py-1 text-xs font-semibold tracking-tight shadow-sm backdrop-blur-xl dark:border-white/10"
@@ -228,14 +257,21 @@ function onDelete(entry: EntryView) {
         </h2>
 
         <ol
-          class="divide-y divide-foreground/[0.06] overflow-hidden rounded-3xl border border-foreground/[0.06] bg-card/70 shadow-sm dark:divide-white/[0.06] dark:border-white/10 dark:bg-white/[0.04]"
+          class="divide-y divide-foreground/[0.06] overflow-clip rounded-3xl border border-foreground/[0.06] bg-card/70 shadow-sm dark:divide-white/[0.06] dark:border-white/10 dark:bg-white/[0.04]"
         >
           <li
             v-for="item in day.entries"
             :key="item.id"
             class="px-4 py-3.5 sm:px-5 sm:py-4"
           >
-            <EntryCard :entry="item" flush time-only @delete="onDelete">
+            <EntryCard
+              :entry="item"
+              flush
+              time-only
+              reply-in-place
+              @delete="onDelete"
+              @reply="openReply"
+            >
               <template v-if="item.replyCount" #footer>
                 <button
                   type="button"
@@ -254,7 +290,7 @@ function onDelete(entry: EntryView) {
                     aria-hidden="true"
                   />
                   {{ item.replyCount }}
-                  {{ item.replyCount === 1 ? 'reply' : 'replies' }}
+                  {{ item.replyCount === 1 ? "reply" : "replies" }}
                   <ChevronDown
                     class="size-3.5 transition-transform duration-200"
                     :class="expanded.has(item.id) ? 'rotate-180' : ''"
@@ -264,7 +300,11 @@ function onDelete(entry: EntryView) {
               </template>
             </EntryCard>
             <p
-              v-if="expanded.has(item.id) && threadLoading[item.id] && !loadedThreads[item.id]"
+              v-if="
+                expanded.has(item.id) &&
+                threadLoading[item.id] &&
+                !loadedThreads[item.id]
+              "
               class="mt-3 text-xs text-muted-foreground"
             >
               Loading replies…
@@ -274,9 +314,11 @@ function onDelete(entry: EntryView) {
               :parent-id="item.id"
               :children-of="threads.childrenOf"
               flush
+              reply-in-place
               :parent-created-at="item.createdAt"
               class="mt-3 ml-1"
               @delete="onDelete"
+              @reply="openReply"
             />
           </li>
         </ol>
@@ -291,9 +333,15 @@ function onDelete(entry: EntryView) {
           :disabled="loadingMore"
           @click="loadMoreRoots"
         >
-          {{ loadingMore ? 'Loading…' : 'Load more' }}
+          {{ loadingMore ? "Loading…" : "Load more" }}
         </Button>
       </div>
     </div>
   </div>
+  <ReplyComposeLayer
+    :entry="replyingTo"
+    @close="closeReply"
+    @exited="onExited"
+    @saved="onReplySaved"
+  />
 </template>

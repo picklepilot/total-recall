@@ -52,6 +52,12 @@ async function onDelete(target: EntryView) {
     await router.replace(target.parentId ? `/entries/${target.parentId}` : '/timeline')
   }
 }
+
+const { replyingTo, openReply, closeReply, onExited } = useReplyComposer({
+  restoreFocus: (id) => {
+    document.querySelector<HTMLElement>(`[data-reply-for="${CSS.escape(id)}"]`)?.focus()
+  },
+})
 </script>
 
 <template>
@@ -106,15 +112,29 @@ async function onDelete(target: EntryView) {
         </ol>
       </nav>
 
-      <EntryCard :entry="entry" highlighted @delete="onDelete" />
+      <EntryCard
+        :entry="entry"
+        highlighted
+        reply-in-place
+        @delete="onDelete"
+        @reply="openReply"
+      />
 
       <EntryThreadBranch
         :parent-id="entry.id"
         :children-of="threads.childrenOf"
         :max-level="6"
+        reply-in-place
         class="ml-3 sm:ml-5"
         @delete="onDelete"
+        @reply="openReply"
       />
     </template>
   </div>
+  <ReplyComposeLayer
+    :entry="replyingTo"
+    @close="closeReply"
+    @exited="onExited"
+    @saved="closeReply"
+  />
 </template>

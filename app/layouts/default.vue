@@ -63,7 +63,7 @@ async function onSignIn() {
       class="sticky top-0 z-20 pt-[env(safe-area-inset-top)] backdrop-blur-xl"
     >
       <div
-        class="mx-auto flex h-24 sm:h-14 max-w-3xl items-center justify-between gap-3 px-8 sm:px-5"
+        class="mx-auto flex sm:h-14 max-w-3xl items-center justify-between gap-3 px-8 py-4 sm:py-0 sm:px-5"
       >
         <NuxtLink
           to="/"

@@ -17,12 +17,15 @@ const props = withDefaults(
     flush?: boolean;
     /** When set, replies from the same day as the parent show only their time. */
     parentCreatedAt?: Date;
+    /** Reply opens the composer on this page instead of leaving it. */
+    replyInPlace?: boolean;
   }>(),
-  { level: 1, maxLevel: 4, flush: false },
+  { level: 1, maxLevel: 4, flush: false, replyInPlace: false },
 );
 
 const emit = defineEmits<{
   delete: [entry: EntryView];
+  reply: [entry: EntryView];
 }>();
 
 const replies = computed(() => props.childrenOf.get(props.parentId) ?? []);
@@ -49,7 +52,9 @@ function sameDayAsParent(d: Date) {
         :flush="flush"
         :time-only="sameDayAsParent(reply.createdAt)"
         :highlighted="reply.id === highlightId"
+        :reply-in-place="replyInPlace"
         @delete="emit('delete', $event)"
+        @reply="emit('reply', $event)"
       />
       <EntryThreadBranch
         v-if="level < maxLevel"
@@ -60,7 +65,9 @@ function sameDayAsParent(d: Date) {
         :highlight-id="highlightId"
         :flush="flush"
         :parent-created-at="parentCreatedAt && reply.createdAt"
+        :reply-in-place="replyInPlace"
         @delete="emit('delete', $event)"
+        @reply="emit('reply', $event)"
       />
       <NuxtLink
         v-else-if="childrenOf.get(reply.id)?.length"

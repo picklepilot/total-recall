@@ -66,6 +66,7 @@ const editor = useEditor({
 
       if (event.key === 'Escape') {
         event.preventDefault()
+        event.stopPropagation()
         ed.chain().focus().deleteRange({ from: ctx.from, to: ctx.to }).run()
         return true
       }
@@ -138,8 +139,16 @@ onBeforeUnmount(() => {
   editor.value?.destroy()
 })
 
+function focus() {
+  const ed = editor.value
+  if (!ed) return false
+  ed.commands.focus('end')
+  return true
+}
+
 defineExpose({
   clear: () => editor.value?.commands.clearContent(),
+  focus,
 })
 </script>
 
@@ -153,6 +162,11 @@ defineExpose({
     "
   >
     <EditorContent v-if="editor" :editor="editor" />
+    <div
+      v-else
+      aria-hidden="true"
+      :class="bare ? 'min-h-[11rem] sm:min-h-[13rem]' : 'min-h-[220px]'"
+    />
     <FloatingMenu
       v-if="editor"
       :editor="editor"

@@ -6,9 +6,9 @@ import {
   orderBy,
   query,
   serverTimestamp,
-  setDoc,
   updateDoc,
   where,
+  writeBatch,
   type Firestore,
 } from 'firebase/firestore'
 import { deleteObject, getDownloadURL, ref as storageRef, uploadBytes } from 'firebase/storage'
@@ -17,6 +17,8 @@ import type { FirebaseStorage } from 'firebase/storage'
 import type { ThingView } from '@/types/thing'
 import { mapThingDoc } from '@/lib/thingDoc'
 import { prepareThingImage } from '@/lib/prepareThingImage'
+import { threadFieldsForNewEntry } from '~~/shared/entryThreads'
+import { entryDraftForNewThing } from '~~/shared/thingEntry'
 import {
   fieldsFromKind,
   normalizeKind,
@@ -112,10 +114,13 @@ export function useThings() {
     const name = input.name.trim()
     if (!name) throw new Error('Give it a name.')
     const kind = normalizeKind(input.kind)
-    const ref = doc(collection(db.value, 'things'))
+    const thingRef = doc(collection(db.value, 'things'))
+    const entryRef = doc(collection(db.value, 'entries'))
     const fields = fieldsFromKind(kind)
+    const draft = entryDraftForNewThing({ id: thingRef.id, name, kind, fields })
     const now = new Date()
-    await setDoc(ref, {
+    const batch = writeBatch(db.value)
+    batch.set(thingRef, {
       userId: user.value.uid,
       name,
       kind,
@@ -124,9 +129,20 @@ export function useThings() {
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     })
+    batch.set(entryRef, {
+      userId: user.value.uid,
+      contentJson: draft.contentJson,
+      contentText: draft.contentText,
+      tags: draft.tags,
+      thingIds: draft.thingIds,
+      ...threadFieldsForNewEntry(entryRef.id, null),
+      replyCount: 0,
+      createdAt: serverTimestamp(),
+    })
+    await batch.commit()
     writeLastThingKind(kind)
     const view: ThingView = {
-      id: ref.id,
+      id: thingRef.id,
       userId: user.value.uid,
       name,
       kind,
@@ -140,6 +156,11 @@ export function useThings() {
     }
     putThing(view, true)
     loaded.value = true
+    try {
+      await entriesApi.showSavedEntry(entryRef.id)
+    } catch (e) {
+      console.warn('[total-recall] thing was added, but the timeline entry was not shown yet:', e)
+    }
     return view
   }
 

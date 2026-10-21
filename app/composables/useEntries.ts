@@ -309,6 +309,17 @@ export function useEntries() {
     return docRef.id
   }
 
+  /** Shows a top-level entry that was just written outside `addEntry`, then indexes it. */
+  async function showSavedEntry(entryId: string) {
+    const view = await fetchEntry(entryId)
+    if (!view) return
+    if (!view.parentId && !rootIds.value.includes(view.id)) {
+      rootIds.value = [view.id, ...rootIds.value]
+    }
+    hasEntries.value = true
+    await indexEntryAfterWrite(entryId)
+  }
+
   function applyDeleteToCache(res: DeleteEntryResult, entryId: string) {
     if (res.result === 'tombstoned') {
       const existing = byId.value[entryId]
@@ -529,6 +540,7 @@ export function useEntries() {
     fetchEntry,
     checkHasEntries,
     addEntry,
+    showSavedEntry,
     updateEntryThingIds,
     stripThingFromCache,
     reindexEntryIds,

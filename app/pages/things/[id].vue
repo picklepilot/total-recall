@@ -41,14 +41,18 @@ const draft = reactive({
 });
 const hydratedId = ref<string | null>(null);
 
-watch(thing, (value) => {
-  if (!value || hydratedId.value === value.id) return;
-  hydratedId.value = value.id;
-  draft.name = value.name;
-  draft.kind = value.kind;
-  draft.summary = value.summary;
-  draft.fields = value.fields.map((field) => ({ ...field }));
-});
+watch(
+  thing,
+  (value) => {
+    if (!value || hydratedId.value === value.id) return;
+    hydratedId.value = value.id;
+    draft.name = value.name;
+    draft.kind = value.kind;
+    draft.summary = value.summary;
+    draft.fields = value.fields.map((field) => ({ ...field }));
+  },
+  { immediate: true },
+);
 
 const suggestions = computed(() => missingSuggestedFields(draft.kind, draft.fields));
 

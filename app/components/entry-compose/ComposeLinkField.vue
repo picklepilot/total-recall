@@ -74,8 +74,9 @@ const showLinkAttachment = computed(() => {
       v-model="url"
       type="url"
       autocomplete="off"
-      placeholder="https://…"
-      class="h-11 rounded-lg bg-card/50"
+      inputmode="url"
+      placeholder="Paste a link"
+      class="h-11 rounded-xl bg-background"
     />
     <p v-if="previewLoading" class="text-xs text-muted-foreground">Fetching preview…</p>
     <p v-else-if="previewError" class="text-xs text-destructive">{{ previewError }}</p>

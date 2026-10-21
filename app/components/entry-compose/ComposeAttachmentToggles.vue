@@ -11,35 +11,37 @@ const emit = defineEmits<{
   toggleStar: []
 }>()
 
-const tileClass =
-  'flex min-h-[5.5rem] flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-4 text-center transition active:scale-[0.98] motion-reduce:active:scale-100'
-const tileIdle = 'border-border/80 bg-card/50 text-muted-foreground hover:bg-card hover:text-foreground'
-const tileOn = 'border-primary/50 bg-primary/5 text-foreground ring-2 ring-primary/35'
+const pillClass =
+  'inline-flex h-10 touch-manipulation items-center gap-1.5 rounded-full px-3.5 text-sm font-medium transition active:scale-[0.97] motion-reduce:active:scale-100 sm:h-9'
+const pillIdle = 'text-muted-foreground hover:bg-muted hover:text-foreground'
+const pillOn = 'bg-foreground/[0.07] text-foreground dark:bg-foreground/10'
 </script>
 
 <template>
-  <div class="grid grid-cols-2 gap-3 sm:max-w-sm">
+  <div class="flex items-center gap-1">
     <button
       type="button"
-      class="touch-manipulation"
-      :class="[tileClass, linkActive ? tileOn : tileIdle]"
+      :class="[pillClass, linkActive ? pillOn : pillIdle]"
       :aria-pressed="linkActive"
-      :aria-label="linkActive ? 'Hide link field' : 'Show link field'"
+      :aria-label="linkActive ? 'Hide link field' : 'Add a link'"
       @click="emit('toggleLink')"
     >
-      <Link2 class="size-7 shrink-0 opacity-90" aria-hidden="true" />
-      <span class="text-sm font-medium leading-tight">Link</span>
+      <Link2 class="size-4" aria-hidden="true" />
+      Link
     </button>
     <button
       type="button"
-      class="touch-manipulation"
-      :class="[tileClass, starActive ? tileOn : tileIdle]"
+      :class="[pillClass, starActive ? pillOn : pillIdle]"
       :aria-pressed="starActive"
-      :aria-label="starActive ? 'Hide rating field' : 'Show rating field'"
+      :aria-label="starActive ? 'Hide rating field' : 'Add a rating'"
       @click="emit('toggleStar')"
     >
-      <Star class="size-7 shrink-0 opacity-90" aria-hidden="true" />
-      <span class="text-sm font-medium leading-tight">Rating</span>
+      <Star
+        class="size-4"
+        :class="starActive ? 'fill-amber-400 text-amber-500' : ''"
+        aria-hidden="true"
+      />
+      Rating
     </button>
   </div>
 </template>

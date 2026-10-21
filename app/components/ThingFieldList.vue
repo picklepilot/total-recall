@@ -43,7 +43,6 @@ function addField() {
 
 function inputType(type: ThingFieldType) {
   if (type === "number") return "number";
-  if (type === "date") return "date";
   if (type === "url") return "url";
   return "text";
 }
@@ -83,7 +82,14 @@ function inputType(type: ThingFieldType) {
             <X class="size-3.5" />
           </button>
         </div>
+        <ThingDateField
+          v-if="field.type === 'date'"
+          :model-value="field.value"
+          :label="field.label"
+          @update:model-value="patch(field.id, { value: $event })"
+        />
         <input
+          v-else
           :value="field.value"
           :type="inputType(field.type)"
           :placeholder="field.label ? field.label : 'Value'"

@@ -9,7 +9,7 @@ useHead({ title: 'Thread — Total Recall' })
 const route = useRoute()
 const router = useRouter()
 const firebaseConfigured = useFirebaseUiReady()
-const { byId, ready, loadThread, fetchEntry, deleteEntry } = useEntries()
+const { byId, ready, loadThread, fetchEntry, deleteEntry, updateEntryThingIds } = useEntries()
 const { signedIn } = useAuth()
 const { confirmAndDelete } = useEntryDeletion(deleteEntry)
 
@@ -50,6 +50,28 @@ async function onDelete(target: EntryView) {
   const result = await confirmAndDelete(target, hasReplies)
   if (result === 'deleted' && target.id === entryId.value) {
     await router.replace(target.parentId ? `/entries/${target.parentId}` : '/timeline')
+  }
+}
+
+const thingIds = ref<string[]>([])
+const thingError = ref('')
+
+watch(entry, (value) => {
+  if (!value) return
+  const next = value.thingIds.join('\0')
+  if (next !== thingIds.value.join('\0')) thingIds.value = [...value.thingIds]
+})
+
+async function onThingIds(ids: string[]) {
+  if (!entry.value) return
+  const previous = thingIds.value
+  thingIds.value = ids
+  thingError.value = ''
+  try {
+    await updateEntryThingIds(entry.value.id, ids)
+  } catch (e) {
+    thingIds.value = previous
+    thingError.value = e instanceof Error ? e.message : 'Could not update things.'
   }
 }
 
@@ -118,7 +140,12 @@ const { replyingTo, openReply, closeReply, onExited } = useReplyComposer({
         reply-in-place
         @delete="onDelete"
         @reply="openReply"
-      />
+      >
+        <template v-if="!entry.deleted" #things>
+          <ThingPicker :model-value="thingIds" @update:model-value="onThingIds" />
+          <p v-if="thingError" class="mt-1 text-xs text-destructive">{{ thingError }}</p>
+        </template>
+      </EntryCard>
 
       <EntryThreadBranch
         :parent-id="entry.id"

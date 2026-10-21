@@ -11,6 +11,7 @@ import {
   startAfter,
   setDoc,
   Timestamp,
+  updateDoc,
   where,
   writeBatch,
   type Firestore,
@@ -21,6 +22,7 @@ import type { EntryView, EntryWidget, ImportMeta } from '@/types/entry'
 import type { EntryImportDraft } from '~~/shared/import/types'
 import { mapEntryDoc, type EntrySnapshot } from '@/lib/entryDoc'
 import { threadFieldsForNewEntry } from '~~/shared/entryThreads'
+import { normalizeThingIds } from '~~/shared/thingKinds'
 
 export const TIMELINE_PAGE_SIZE = 30
 
@@ -247,6 +249,7 @@ export function useEntries() {
     contentText: string
     tags: string[]
     widgets?: EntryWidget[]
+    thingIds?: string[]
     parentId?: string | null
   }): Promise<string> {
     if (!db.value || !user.value) {
@@ -264,12 +267,14 @@ export function useEntries() {
     }
 
     const thread = threadFieldsForNewEntry(docRef.id, parent)
+    const thingIds = normalizeThingIds(payload.thingIds)
     const batch = writeBatch(db.value)
     batch.set(docRef, {
       userId: user.value.uid,
       contentJson: payload.contentJson,
       contentText: payload.contentText,
       tags: payload.tags,
+      ...(thingIds.length ? { thingIds } : {}),
       ...(payload.widgets?.length ? { widgets: payload.widgets } : {}),
       ...thread,
       ...(thread.parentId ? {} : { replyCount: 0 }),
@@ -316,6 +321,7 @@ export function useEntries() {
             contentText: '',
             contentJson: JSON.stringify({ type: 'doc', content: [{ type: 'paragraph' }] }),
             tags: [],
+            thingIds: [],
             widgets: undefined,
           },
         }
@@ -450,6 +456,61 @@ export function useEntries() {
     return { imported, skippedDuplicate, failed, errors, dryRun }
   }
 
+  async function updateEntryThingIds(entryId: string, thingIds: string[]) {
+    if (!db.value || !user.value) throw new Error('Sign in with Google to edit entries.')
+    const nextIds = normalizeThingIds(thingIds)
+    const ref = doc(db.value, 'entries', entryId)
+    await updateDoc(ref, nextIds.length ? { thingIds: nextIds } : { thingIds: [] })
+    const existing = byId.value[entryId]
+    if (existing) {
+      byId.value = { ...byId.value, [entryId]: { ...existing, thingIds: nextIds } }
+    }
+    await indexEntryAfterWrite(entryId)
+  }
+
+  function stripThingFromCache(thingId: string) {
+    let changed = false
+    const next = { ...byId.value }
+    for (const [id, entry] of Object.entries(next)) {
+      if (!entry.thingIds.includes(thingId)) continue
+      next[id] = { ...entry, thingIds: entry.thingIds.filter((item) => item !== thingId) }
+      changed = true
+    }
+    if (changed) byId.value = next
+  }
+
+  async function reindexEntryIds(entryIds: string[]) {
+    for (const entryId of entryIds) {
+      await indexEntryAfterWrite(entryId)
+    }
+  }
+
+  /** Entries that list this thing, newest first. Requires the thingIds composite index. */
+  async function loadEntriesForThing(thingId: string): Promise<EntryView[]> {
+    if (!db.value || !user.value) return []
+    const snap = await getDocs(
+      query(
+        collection(db.value, 'entries'),
+        where('userId', '==', user.value.uid),
+        where('thingIds', 'array-contains', thingId),
+        orderBy('createdAt', 'desc'),
+        limit(50),
+      ),
+    )
+    const views = snap.docs.map((d) => mapEntryDoc(d.id, d.data() as EntrySnapshot))
+    putEntries(views)
+    return views.filter((entry) => !entry.deleted)
+  }
+
+  async function reindexLinkedEntries(thingId: string) {
+    try {
+      const linked = await loadEntriesForThing(thingId)
+      await reindexEntryIds(linked.map((entry) => entry.id))
+    } catch (e) {
+      console.warn('[total-recall] could not reindex entries for thing:', e)
+    }
+  }
+
   return {
     byId,
     roots,
@@ -468,6 +529,11 @@ export function useEntries() {
     fetchEntry,
     checkHasEntries,
     addEntry,
+    updateEntryThingIds,
+    stripThingFromCache,
+    reindexEntryIds,
+    reindexLinkedEntries,
+    loadEntriesForThing,
     deleteEntry,
     addImportedEntry,
     importDrafts,

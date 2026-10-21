@@ -68,6 +68,7 @@ export default defineEventHandler(async (event) => {
         contentJson: EMPTY_DOC_JSON,
         contentText: '',
         tags: [],
+        thingIds: FieldValue.delete(),
         widgets: FieldValue.delete(),
         importMeta: FieldValue.delete(),
         embedding: FieldValue.delete(),

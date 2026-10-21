@@ -5,6 +5,7 @@ import {
 } from 'firebase-admin/firestore'
 import { embedText } from './geminiEmbedding'
 import { formatEntryDocForPrompt, formatThreadSnippet } from './formatEntryForPrompt'
+import { loadThingNames, namesForIds, thingIdsFromEntry } from './thingNames'
 
 const VECTOR_LIMIT = 16
 const FALLBACK_LIMIT = 40
@@ -34,10 +35,15 @@ async function docsToLines(
     }
   }
 
+  const thingIds = live.flatMap((doc) => thingIdsFromEntry(doc.data() as Record<string, unknown>))
+  const thingNames = await loadThingNames(db, uid, thingIds)
+
   return live
     .map((doc) => {
+      const data = doc.data() as Record<string, unknown>
       const path = ancestorIdsOf(doc).map((id) => formatThreadSnippet(ancestors.get(id)))
-      return formatEntryDocForPrompt(doc.id, doc.data() as Record<string, unknown>, path)
+      const names = namesForIds(thingNames, thingIdsFromEntry(data))
+      return formatEntryDocForPrompt(doc.id, data, path, names)
     })
     .join('\n')
 }

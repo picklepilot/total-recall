@@ -4,16 +4,18 @@ import {
   type QueryDocumentSnapshot,
 } from 'firebase-admin/firestore'
 import { formatEntryWidgetsPlain } from '~~/shared/entryWidgetsPlain'
+import { joinEmbedSource } from '~~/shared/thingPrompt'
 import { embedText } from './geminiEmbedding'
+import { loadThingNames, namesForIds, thingIdsFromEntry } from './thingNames'
 
-export function buildEmbedSource(data: Record<string, unknown>): string {
+export function buildEmbedSource(data: Record<string, unknown>, thingNames: string[] = []): string {
   const tags = (Array.isArray(data.tags) ? data.tags : []) as string[]
-  const parts = [
-    tags.join(' '),
-    formatEntryWidgetsPlain(data.widgets, data.url, data.linkPreview),
-    String(data.contentText ?? ''),
-  ]
-  return parts.filter(Boolean).join('\n').trim().slice(0, 7500)
+  return joinEmbedSource({
+    tags,
+    thingNames,
+    widgetsPlain: formatEntryWidgetsPlain(data.widgets, data.url, data.linkPreview),
+    contentText: String(data.contentText ?? ''),
+  })
 }
 
 type EntryDocSnap = QueryDocumentSnapshot | DocumentSnapshot
@@ -36,7 +38,11 @@ export async function applyEmbeddingToEntryDoc(
   if (!data) return 'skipped'
   if (data.userId !== ownerUid) return 'forbidden'
 
-  const source = buildEmbedSource(data)
+  const thingIds = thingIdsFromEntry(data)
+  const thingNameMap = thingIds.length
+    ? await loadThingNames(doc.ref.firestore, ownerUid, thingIds)
+    : new Map<string, string>()
+  const source = buildEmbedSource(data, namesForIds(thingNameMap, thingIds))
   if (!source) return 'skipped'
 
   const pace = options?.paceBeforeEmbedMs ?? 0

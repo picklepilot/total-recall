@@ -1,5 +1,12 @@
 <script setup lang="ts">
-import { ArrowUp, Loader2 } from "lucide-vue-next";
+import {
+  ChevronDown,
+  KeyRound,
+  Loader2,
+  LockKeyhole,
+  PenLine,
+  Sparkles,
+} from "lucide-vue-next";
 import {
   isChatUiTableBlock,
   type ChatUiTableBlock,
@@ -9,7 +16,6 @@ useHead({
   title: "Ask your log — Total Recall",
 });
 
-const nuxtApp = useNuxtApp();
 const firebaseConfigured = useFirebaseUiReady();
 const { hasEntries, ready, checkHasEntries } = useEntries();
 
@@ -80,7 +86,6 @@ const reply = ref("");
 const uiTables = ref<ChatUiTableBlock[]>([]);
 const streamError = ref("");
 const responseRef = ref<HTMLElement | null>(null);
-const isTextareaFocused = ref(false);
 
 const formattedParagraphs = computed(() => {
   const t = reply.value.trim();
@@ -102,9 +107,6 @@ async function runStream() {
   sawFirstChunk.value = false;
   streaming.value = true;
   sessionStarted.value = true;
-
-  await nextTick();
-  responseRef.value?.scrollIntoView({ behavior: "smooth", block: "start" });
 
   try {
     const headers = await authHeaders();
@@ -202,278 +204,270 @@ function onKeydown(e: KeyboardEvent) {
 }
 
 watch(
-  ready,
-  (isReady) => {
-    if (isReady && import.meta.client) {
+  [ready, hasEntries],
+  ([isReady, entries]) => {
+    if (isReady && entries && import.meta.client) {
       nextTick(() => document.getElementById("ask-log-input")?.focus());
     }
   },
   { immediate: true },
 );
+
+watch([reply, () => uiTables.value.length], async () => {
+  if (!streaming.value) return;
+  await nextTick();
+  const el = responseRef.value;
+  if (el) el.scrollTop = el.scrollHeight;
+});
 </script>
 
 <template>
-  <div class="pb-20">
-    <div
-      class="flex flex-col transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
-      :class="
-        sessionStarted
-          ? 'min-h-0 pt-1'
-          : 'min-h-[min(520px,calc(100dvh-11rem))] justify-center'
-      "
-    >
-      <header v-if="!sessionStarted" class="mb-10 space-y-2 text-center">
-        <h1 class="text-2xl font-semibold tracking-tight text-foreground">
-          Ask your log
-        </h1>
-        <p
-          class="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground"
-        >
-          Questions retrieve the most relevant entries (Firestore vector search),
-          then stream an answer. Sign in is required.
-        </p>
-      </header>
-
-      <div
-        class="mx-auto w-full max-w-2xl transition-all duration-700 ease-[cubic-bezier(0.22,1,0.36,1)]"
-        :class="sessionStarted ? '' : 'px-1'"
+  <div
+    class="mx-auto flex h-[calc(100dvh-env(safe-area-inset-top)-env(safe-area-inset-bottom)-11.5rem)] w-full max-w-xl flex-col sm:h-[calc(100dvh-env(safe-area-inset-top)-8rem)] sm:-mb-16"
+  >
+    <header class="mb-5 px-4 sm:mb-7 sm:px-1">
+      <h1
+        class="text-[1.7rem] leading-tight font-semibold tracking-tight sm:text-3xl"
       >
-        <div
-          class="relative overflow-hidden rounded-2xl border bg-card/60 shadow-sm backdrop-blur-sm transition-[border-color,box-shadow,ring-color,ring-width] duration-200 dark:bg-card/40"
-          :class="[
-            sessionStarted ? 'shadow-md' : 'shadow-lg shadow-primary/5',
-            isTextareaFocused
-              ? 'border-ring ring-3 ring-ring/60 dark:ring-ring/50'
-              : 'border-border/70 ring-3 ring-transparent',
-          ]"
-        >
+        Ask your log
+      </h1>
+    </header>
+
+    <section
+      v-if="!firebaseConfigured"
+      class="my-auto rounded-3xl border border-amber-500/30 bg-amber-50/70 p-6 text-center backdrop-blur-xl dark:bg-amber-500/10"
+    >
+      <span
+        class="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-amber-500/15 text-amber-600 dark:text-amber-400"
+      >
+        <KeyRound class="size-5" aria-hidden="true" />
+      </span>
+      <h2 class="text-base font-semibold">Connect Firebase</h2>
+      <p
+        class="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-muted-foreground"
+      >
+        Once Firestore is configured, your entries will be available to search.
+      </p>
+    </section>
+
+    <section
+      v-else-if="!signedIn"
+      class="my-auto rounded-3xl border border-border/70 bg-card/80 p-6 text-center shadow-sm backdrop-blur-xl sm:p-8"
+    >
+      <span
+        class="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-muted text-muted-foreground"
+      >
+        <LockKeyhole class="size-5" aria-hidden="true" />
+      </span>
+      <h2 class="text-base font-semibold">Sign in to ask your log</h2>
+      <p
+        class="mx-auto mt-1.5 max-w-xs text-sm leading-relaxed text-muted-foreground"
+      >
+        Use the Sign in button in the header to search what you've written.
+      </p>
+    </section>
+
+    <section
+      v-else-if="ready && hasEntries === false"
+      class="my-auto rounded-3xl border border-dashed border-foreground/10 p-6 text-center sm:p-8"
+    >
+      <span
+        class="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-muted text-muted-foreground"
+      >
+        <Sparkles class="size-5" aria-hidden="true" />
+      </span>
+      <h2 class="text-base font-semibold">Nothing to search yet</h2>
+      <p
+        class="mx-auto mt-1.5 max-w-xs text-sm leading-relaxed text-muted-foreground"
+      >
+        Write something first so there's a log to ask about.
+      </p>
+      <Button
+        as-child
+        size="lg"
+        class="mt-5 h-12 w-full touch-manipulation rounded-full text-base sm:w-auto sm:px-8"
+      >
+        <NuxtLink to="/">
+          <PenLine class="size-4" aria-hidden="true" />
+          Write your first entry
+        </NuxtLink>
+      </Button>
+    </section>
+
+    <div
+      v-else-if="!ready || hasEntries === null"
+      aria-busy="true"
+      aria-label="Loading"
+    >
+      <div
+        class="overflow-hidden rounded-3xl border border-foreground/[0.06] bg-card/70 px-5 py-5 shadow-sm dark:border-white/10 dark:bg-white/[0.04]"
+      >
+        <div class="space-y-2.5">
+          <div class="h-3.5 w-11/12 animate-pulse rounded-full bg-foreground/[0.07]" />
+          <div class="h-3.5 w-4/5 animate-pulse rounded-full bg-foreground/[0.07]" />
+          <div class="h-3.5 w-2/5 animate-pulse rounded-full bg-foreground/[0.07]" />
+        </div>
+      </div>
+    </div>
+
+    <template v-else>
+      <div class="flex min-h-0 flex-1 flex-col">
+        <div class="min-h-0 flex-1">
           <div
-            class="pointer-events-none absolute inset-x-0 top-0 h-px bg-linear-to-r from-transparent via-primary/35 to-transparent"
-            aria-hidden="true"
-          />
-          <div :class="sessionStarted ? 'p-3 sm:p-4' : 'p-4 sm:p-6 sm:pb-4'">
-            <label class="sr-only" for="ask-log-input">Your question</label>
-            <Textarea
-              id="ask-log-input"
-              v-model="prompt"
-              :disabled="streaming || !signedIn || !firebaseConfigured"
-              :class="[
-                'min-h-[7.5rem] resize-y border-0 bg-transparent dark:bg-transparent text-[15px] leading-relaxed shadow-none focus-visible:ring-0 md:min-h-[9rem]',
-                sessionStarted ? 'min-h-[4.5rem] md:min-h-[5.25rem]' : '',
-              ]"
-              placeholder="What do you want to remember? e.g. “What was the latest link I saved about music?”"
-              @keydown="onKeydown"
-              @focus="isTextareaFocused = true"
-              @blur="isTextareaFocused = false"
-            />
-            <div
-              class="mt-3 flex flex-wrap items-center justify-between gap-3 border-t border-border/50 pt-3"
-            >
-              <p class="text-[11px] text-muted-foreground sm:text-xs">
-                <kbd
-                  class="rounded border border-border bg-muted/80 px-1 py-0.5 font-mono text-[10px]"
-                  >⌘</kbd
-                >
-                <span class="mx-0.5">+</span>
-                <kbd
-                  class="rounded border border-border bg-muted/80 px-1 py-0.5 font-mono text-[10px]"
-                  >Enter</kbd
-                >
-                to send
-              </p>
-              <Button
-                class="rounded-xl gap-2 shadow-sm pr-3"
-                :disabled="
-                  streaming ||
-                  !prompt.trim() ||
-                  !signedIn ||
-                  !firebaseConfigured
-                "
-                @click="onSubmit"
+            v-if="!sessionStarted"
+            class="flex h-full items-center justify-center px-4 text-center"
+          >
+            <div>
+              <span
+                class="mx-auto mb-4 grid size-12 place-items-center rounded-2xl bg-muted text-muted-foreground"
               >
-                <Loader2 v-if="streaming" class="size-4 animate-spin" />
-                <ArrowUp v-else class="size-4" />
-                {{ streaming ? "Thinking…" : "Ask" }}
-              </Button>
+                <Sparkles class="size-5" aria-hidden="true" />
+              </span>
+              <h2 class="text-base font-semibold">Answers show up here</h2>
+              <p
+                class="mx-auto mt-1.5 max-w-xs text-sm leading-relaxed text-muted-foreground"
+              >
+                Ask about a link, a rating, or anything you've written down.
+              </p>
             </div>
           </div>
-        </div>
-      </div>
-    </div>
 
-    <div
-      v-if="signedIn && firebaseConfigured && ready && hasEntries"
-      class="mx-auto mt-8 max-w-2xl rounded-xl border border-border/60 bg-muted/15 px-4 py-4 sm:px-5"
-    >
-      <p class="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-        Vector search
-      </p>
-      <p class="mt-1 text-sm text-muted-foreground">
-        Backfill or refresh embeddings for Firestore vector search (uses your Gemini key).
-      </p>
-      <label class="mt-3 flex cursor-pointer items-center gap-2 text-sm text-foreground">
-        <input
-          v-model="forceReindex"
-          type="checkbox"
-          class="size-4 rounded border-border accent-primary"
-        />
-        Overwrite existing vectors
-      </label>
-      <div class="mt-4 flex flex-wrap items-center gap-3">
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          class="rounded-lg"
-          :disabled="reindexing || streaming"
-          @click="runReindexAll"
-        >
-          <Loader2 v-if="reindexing" class="mr-2 size-4 animate-spin" />
-          {{ reindexing ? "Reindexing…" : "Reindex all" }}
-        </Button>
-      </div>
-      <p v-if="reindexStatus" class="mt-3 text-xs text-muted-foreground">
-        {{ reindexStatus }}
-      </p>
-    </div>
-
-    <Card
-      v-if="!firebaseConfigured"
-      class="mx-auto mt-10 max-w-2xl border-amber-500/30 bg-amber-500/5"
-    >
-      <CardHeader>
-        <CardTitle class="text-base">Connect Firebase</CardTitle>
-        <CardDescription>
-          Once Firestore is configured, your entries will be available as
-          context for answers.
-        </CardDescription>
-      </CardHeader>
-    </Card>
-
-    <Card
-      v-else-if="!signedIn"
-      class="mx-auto mt-10 max-w-2xl border-border/80 bg-muted/30"
-    >
-      <CardHeader>
-        <CardTitle class="text-base">Sign in</CardTitle>
-        <CardDescription>
-          Sign in with Google in the header to ask questions about your log.
-        </CardDescription>
-      </CardHeader>
-    </Card>
-
-    <div
-      v-else-if="ready && hasEntries === false"
-      class="mx-auto mt-10 max-w-2xl rounded-xl border border-dashed border-border py-12 text-center"
-    >
-      <p class="text-sm text-muted-foreground">
-        No entries yet.
-        <NuxtLink
-          to="/"
-          class="font-medium text-primary underline-offset-4 hover:underline"
-        >
-          Add something
-        </NuxtLink>
-        first so there is context to search.
-      </p>
-    </div>
-
-    <div
-      v-if="sessionStarted && signedIn && hasEntries"
-      ref="responseRef"
-      class="mx-auto mt-10 max-w-2xl space-y-6"
-    >
-      <div
-        v-if="streaming && !sawFirstChunk"
-        class="rounded-2xl border border-border/60 bg-muted/20 px-6 py-10"
-        role="status"
-        aria-live="polite"
-      >
-        <div class="mx-auto flex max-w-[200px] flex-col gap-3">
-          <div class="flex justify-center gap-1.5">
-            <span
-              class="size-2.5 rounded-full bg-primary/70 animate-bounce [animation-duration:0.55s]"
-              style="animation-delay: 0ms"
-            />
-            <span
-              class="size-2.5 rounded-full bg-primary/70 animate-bounce [animation-duration:0.55s]"
-              style="animation-delay: 120ms"
-            />
-            <span
-              class="size-2.5 rounded-full bg-primary/70 animate-bounce [animation-duration:0.55s]"
-              style="animation-delay: 240ms"
-            />
-          </div>
-          <p class="text-center text-sm font-medium text-muted-foreground">
-            Reading your log…
-          </p>
-          <div class="h-1.5 overflow-hidden rounded-full bg-muted">
-            <div
-              class="h-full w-1/3 rounded-full bg-primary/50 [animation:ask-bar_1.2s_ease-in-out_infinite]"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div
-        v-else-if="reply || streamError || uiTables.length"
-        class="rounded-2xl border border-border/70 bg-card/50 px-5 py-6 shadow-sm sm:px-7 sm:py-8"
-      >
-        <p
-          class="text-xs font-medium uppercase tracking-wide text-muted-foreground"
-        >
-          Answer
-        </p>
-        <div v-if="uiTables.length" class="mt-4 space-y-2">
-          <ChatUiTable
-            v-for="(block, ti) in uiTables"
-            :key="'ui-' + ti"
-            :block="block"
-          />
-        </div>
-        <div
-          v-if="streaming && sawFirstChunk"
-          class="mt-4 text-[15px] leading-[1.7] text-foreground whitespace-pre-wrap"
-          :class="uiTables.length ? 'pt-2' : ''"
-        >
-          {{ reply
-          }}<span
-            class="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-primary align-middle"
-            aria-hidden="true"
-          />
-        </div>
-        <div
-          v-else-if="!streaming && reply.trim()"
-          class="mt-4 space-y-4 text-[15px] leading-[1.7] text-foreground"
-          :class="uiTables.length ? 'pt-2' : ''"
-        >
-          <p
-            v-for="(para, i) in formattedParagraphs"
-            :key="i"
-            class="text-pretty"
+          <div
+            v-else
+            ref="responseRef"
+            class="h-full overflow-y-auto rounded-3xl border border-foreground/[0.06] bg-card/70 px-4 py-4 shadow-sm sm:px-5 sm:py-5 dark:border-white/10 dark:bg-white/[0.04]"
+            :role="streaming ? 'status' : undefined"
+            :aria-live="streaming ? 'polite' : undefined"
+            :aria-busy="streaming && !sawFirstChunk"
           >
-            {{ para }}
-          </p>
-        </div>
-      </div>
+            <div v-if="streaming && !sawFirstChunk" class="space-y-2.5">
+              <div
+                class="h-3.5 w-11/12 animate-pulse rounded-full bg-foreground/[0.07]"
+              />
+              <div
+                class="h-3.5 w-4/5 animate-pulse rounded-full bg-foreground/[0.07]"
+              />
+              <div
+                class="h-3.5 w-2/5 animate-pulse rounded-full bg-foreground/[0.07]"
+              />
+              <p class="pt-1.5 text-sm text-muted-foreground">
+                Reading your log…
+              </p>
+            </div>
 
-      <p v-if="streamError" class="text-xs text-destructive">
-        {{ streamError }}
-      </p>
-    </div>
+            <template v-else>
+              <div v-if="uiTables.length" class="space-y-2">
+                <ChatUiTable
+                  v-for="(block, ti) in uiTables"
+                  :key="'ui-' + ti"
+                  :block="block"
+                />
+              </div>
+              <div
+                v-if="streaming && sawFirstChunk"
+                class="text-base leading-relaxed whitespace-pre-wrap text-foreground"
+                :class="uiTables.length ? 'mt-4' : ''"
+              >
+                {{ reply
+                }}<span
+                  class="ml-0.5 inline-block h-4 w-0.5 animate-pulse bg-foreground align-middle"
+                  aria-hidden="true"
+                />
+              </div>
+              <div
+                v-else-if="!streaming && reply.trim()"
+                class="space-y-4 text-base leading-relaxed text-foreground"
+                :class="uiTables.length ? 'mt-4' : ''"
+              >
+                <p
+                  v-for="(para, i) in formattedParagraphs"
+                  :key="i"
+                  class="text-pretty"
+                >
+                  {{ para }}
+                </p>
+              </div>
+              <p
+                v-if="streamError"
+                class="mt-3 text-sm text-destructive"
+              >
+                {{ streamError }}
+              </p>
+            </template>
+          </div>
+        </div>
+
+        <form
+          class="glass-panel mt-4 shrink-0 overflow-hidden rounded-3xl"
+          @submit.prevent="onSubmit"
+        >
+          <label class="sr-only" for="ask-log-input">Your question</label>
+          <Textarea
+            id="ask-log-input"
+            v-model="prompt"
+            :disabled="streaming"
+            class="field-sizing-fixed! h-44 resize-none overflow-y-auto border-0 bg-transparent px-5 pt-5 pb-3 text-base leading-relaxed shadow-none focus-visible:ring-0 md:text-base sm:h-52 dark:bg-transparent"
+            placeholder="What do you want to remember?"
+            @keydown="onKeydown"
+          />
+          <div
+            class="flex items-center justify-between gap-2 border-t border-foreground/[0.06] py-2 pr-2 pl-4"
+          >
+            <p class="text-xs text-muted-foreground">
+              <kbd class="font-sans">⌘</kbd>
+              Enter
+            </p>
+            <Button
+              type="submit"
+              class="h-10 touch-manipulation rounded-full px-5 text-sm font-semibold"
+              :disabled="streaming || !prompt.trim()"
+            >
+              <Loader2 v-if="streaming" class="size-4 animate-spin" />
+              {{ streaming ? "Thinking…" : "Ask" }}
+            </Button>
+          </div>
+        </form>
+
+        <details
+          class="group mt-3 shrink-0 rounded-3xl border border-foreground/[0.06] bg-card/70 px-4 shadow-sm open:pb-4 sm:px-5 dark:border-white/10 dark:bg-white/[0.04]"
+        >
+          <summary
+            class="flex h-12 cursor-pointer list-none items-center justify-between text-sm font-semibold [&::-webkit-details-marker]:hidden"
+          >
+            Search index
+            <ChevronDown
+              class="size-4 text-muted-foreground transition-transform duration-200 group-open:rotate-180"
+              aria-hidden="true"
+            />
+          </summary>
+          <div class="max-h-48 overflow-y-auto">
+            <p class="text-sm leading-relaxed text-muted-foreground">
+              Refresh embeddings so newer entries can be found.
+            </p>
+            <label class="mt-4 flex cursor-pointer items-center gap-2.5 text-sm">
+              <input
+                v-model="forceReindex"
+                type="checkbox"
+                class="size-4 rounded border-border accent-foreground"
+              />
+              Overwrite existing vectors
+            </label>
+            <Button
+              type="button"
+              variant="secondary"
+              class="mt-4 h-10 touch-manipulation rounded-full px-5"
+              :disabled="reindexing || streaming"
+              @click="runReindexAll"
+            >
+              <Loader2 v-if="reindexing" class="size-4 animate-spin" />
+              {{ reindexing ? "Reindexing…" : "Reindex all" }}
+            </Button>
+            <p v-if="reindexStatus" class="mt-3 text-sm text-muted-foreground">
+              {{ reindexStatus }}
+            </p>
+          </div>
+        </details>
+      </div>
+    </template>
   </div>
 </template>
-
-<style scoped>
-@keyframes ask-bar {
-  0% {
-    transform: translateX(-100%);
-  }
-  50% {
-    transform: translateX(200%);
-  }
-  100% {
-    transform: translateX(-100%);
-  }
-}
-</style>

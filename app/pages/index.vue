@@ -18,6 +18,17 @@ function clearParent() {
   router.replace({ query: { ...route.query, parent: undefined } });
 }
 
+/** Set via `/?thing=<id>` from a thing's "Write about this". */
+const thingId = computed(() =>
+  typeof route.query.thing === "string" && route.query.thing
+    ? route.query.thing
+    : null,
+);
+
+function clearThing() {
+  router.replace({ query: { ...route.query, thing: undefined } });
+}
+
 async function onSaved(payload: { id: string; parentId: string | null }) {
   if (payload.parentId) await router.push(`/entries/${payload.id}`);
 }
@@ -112,7 +123,9 @@ async function onSignIn() {
     <div v-else class="my-auto">
       <EntryComposeForm
         :parent-id="parentId"
+        :initial-thing-id="thingId"
         @clear-parent="clearParent"
+        @clear-thing="clearThing"
         @saved="onSaved"
       />
     </div>

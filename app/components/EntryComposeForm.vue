@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   AlertCircle,
+  Box,
   CheckCircle2,
   CornerDownRight,
   Hash,
@@ -25,6 +26,8 @@ import {
 const props = withDefaults(
   defineProps<{
     parentId?: string | null;
+    /** Pre-attach a thing from `/?thing=<id>`. */
+    initialThingId?: string | null;
     /** Already-loaded parent, so the reply overlay doesn't wait on a fetch. */
     parent?: EntryView | null;
     dismissLabel?: string;
@@ -33,6 +36,7 @@ const props = withDefaults(
   }>(),
   {
     parentId: null,
+    initialThingId: null,
     parent: null,
     dismissLabel: "Start a new entry instead",
     suspendEditor: false,
@@ -41,6 +45,7 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   clearParent: [];
+  clearThing: [];
   saved: [payload: { id: string; parentId: string | null }];
 }>();
 
@@ -49,7 +54,16 @@ const attrs = useAttrs();
 
 const nuxtApp = useNuxtApp();
 const { ready, addEntry, fetchEntry } = useEntries();
+const { byId: thingsById, ensureThings, ready: thingsReady } = useThings();
 const { signedIn } = useAuth();
+
+watch(
+  thingsReady,
+  (ok) => {
+    if (ok) void ensureThings().catch(() => {});
+  },
+  { immediate: true },
+);
 
 const tagsFieldId = useId();
 
@@ -86,6 +100,29 @@ const composeStarPanel = ref(false);
 const composeLinkUrl = ref("");
 const composeLinkPreview = ref<LinkPreview | null>(null);
 const tagsModel = ref<string[]>([]);
+const thingIds = ref<string[]>([]);
+
+watch(
+  () => props.initialThingId,
+  (id) => {
+    if (id && !thingIds.value.includes(id)) {
+      thingIds.value = [id, ...thingIds.value];
+    }
+  },
+  { immediate: true },
+);
+
+const aboutThing = computed(() => {
+  const id = props.initialThingId;
+  if (!id || !thingIds.value.includes(id)) return null;
+  return thingsById.value[id] ?? { id, name: "this thing" };
+});
+
+function dismissThing() {
+  const id = props.initialThingId;
+  if (id) thingIds.value = thingIds.value.filter((item) => item !== id);
+  emit("clearThing");
+}
 const contentJson = ref(
   JSON.stringify({ type: "doc", content: [{ type: "paragraph" }] }),
 );
@@ -147,6 +184,7 @@ function resetForm() {
   composeLinkPanel.value = false;
   composeStarPanel.value = false;
   tagsModel.value = [];
+  thingIds.value = props.initialThingId ? [props.initialThingId] : [];
   editorRef.value?.clear();
   contentText.value = "";
   contentJson.value = JSON.stringify({
@@ -183,6 +221,7 @@ async function onSubmit() {
       contentJson: contentJson.value,
       contentText: contentText.value,
       tags: tagsModel.value.map((t) => t.trim().toLowerCase()).filter(Boolean),
+      thingIds: thingIds.value,
       widgets: buildWidgetsFromComposeForm({
         starRating: composeStarRating.value,
         link: hasUrl
@@ -245,6 +284,27 @@ defineExpose({ focus });
           class="-m-1.5 grid size-8 shrink-0 touch-manipulation place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/70 hover:text-foreground dark:hover:bg-white/10"
           :aria-label="dismissLabel"
           @click="emit('clearParent')"
+        >
+          <X class="size-4" />
+        </button>
+      </div>
+      <div
+        v-if="aboutThing"
+        class="flex items-center gap-2 border-b border-foreground/[0.06] px-5 py-2.5 text-sm"
+      >
+        <Box class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <span class="shrink-0 text-muted-foreground">About</span>
+        <NuxtLink
+          :to="`/things/${aboutThing.id}`"
+          class="min-w-0 flex-1 truncate font-medium underline-offset-4 hover:underline"
+        >
+          {{ aboutThing.name }}
+        </NuxtLink>
+        <button
+          type="button"
+          class="-m-1.5 grid size-8 shrink-0 touch-manipulation place-items-center rounded-full text-muted-foreground transition-colors hover:bg-white/70 hover:text-foreground dark:hover:bg-white/10"
+          aria-label="Remove thing"
+          @click="dismissThing"
         >
           <X class="size-4" />
         </button>
@@ -324,6 +384,10 @@ defineExpose({ focus });
           </div>
           <ComposeStarRatingField v-model="composeStarRating" />
         </div>
+      </div>
+
+      <div class="border-t border-foreground/[0.06] px-5">
+        <ThingPicker v-model="thingIds" />
       </div>
 
       <label

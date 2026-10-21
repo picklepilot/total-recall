@@ -50,5 +50,51 @@ service cloud.firestore {
       // Deletes go through /api/entries/delete so replies are never orphaned.
       allow delete: if false;
     }
+
+    match /things/{thingId} {
+      function ownsImage(path, id) {
+        return path is string
+          && path.matches('^users/' + request.auth.uid + '/things/' + id + '/.+');
+      }
+
+      allow read: if request.auth != null && request.auth.uid == resource.data.userId;
+      allow create: if request.auth != null
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.keys().hasAll([
+          'userId', 'name', 'kind', 'fields', 'createdAt', 'updatedAt'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 200
+        && request.resource.data.kind is string
+        && request.resource.data.kind.size() > 0
+        && request.resource.data.kind.size() <= 40
+        && request.resource.data.fields is list
+        && request.resource.data.fields.size() <= 40
+        && (
+          !('imagePath' in request.resource.data)
+          || request.resource.data.imagePath == null
+          || ownsImage(request.resource.data.imagePath, thingId)
+        );
+      allow update: if request.auth != null
+        && request.auth.uid == resource.data.userId
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 200
+        && request.resource.data.kind is string
+        && request.resource.data.kind.size() > 0
+        && request.resource.data.kind.size() <= 40
+        && request.resource.data.fields is list
+        && request.resource.data.fields.size() <= 40
+        && (
+          !('imagePath' in request.resource.data)
+          || request.resource.data.imagePath == null
+          || ownsImage(request.resource.data.imagePath, thingId)
+        );
+      // Deletes go through /api/things/delete so entry links and covers are removed.
+      allow delete: if false;
+    }
   }
 }

@@ -7,6 +7,7 @@ import {
   persistentMultipleTabManager,
   type Firestore,
 } from 'firebase/firestore'
+import { getStorage, type FirebaseStorage } from 'firebase/storage'
 
 let app: FirebaseApp | null = null
 
@@ -24,6 +25,7 @@ export default defineNuxtPlugin(() => {
         firebaseApp: null,
         firebaseAuth: undefined,
         firebaseDb: undefined,
+        firebaseStorage: undefined,
         firebaseReady: false,
       },
     }
@@ -57,11 +59,17 @@ export default defineNuxtPlugin(() => {
     user.value = u
   })
 
+  let storage: FirebaseStorage | undefined
+  if (config.firebaseStorageBucket) {
+    storage = getStorage(app)
+  }
+
   return {
     provide: {
       firebaseApp: app,
       firebaseAuth: auth,
       firebaseDb: db,
+      firebaseStorage: storage,
       firebaseReady: true,
     },
   }

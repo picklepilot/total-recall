@@ -45,6 +45,24 @@ const emit = defineEmits<{
 
 const widgets = computed(() => partitionEntryWidgets(props.entry.widgets));
 
+const { byId: thingsById, ensureThings, ready: thingsReady } = useThings();
+const { signedIn } = useAuth();
+
+watch(
+  [thingsReady, signedIn],
+  ([ok, in_]) => {
+    if (ok && in_ && props.entry.thingIds.length) void ensureThings().catch(() => {});
+  },
+  { immediate: true },
+);
+
+const linkedThings = computed(() =>
+  props.entry.thingIds.flatMap((id) => {
+    const thing = thingsById.value[id];
+    return thing ? [thing] : [];
+  }),
+);
+
 const timeLabel = computed(() => {
   const d = props.entry.createdAt;
   if (props.timeOnly) {
@@ -123,6 +141,23 @@ const timeLabel = computed(() => {
           </template>
         </DropdownMenuContent>
       </DropdownMenu>
+    </div>
+
+    <div v-if="!entry.deleted && $slots.things" class="mt-2">
+      <slot name="things" />
+    </div>
+    <div
+      v-else-if="!entry.deleted && linkedThings.length"
+      class="mt-2 flex flex-wrap gap-1.5"
+    >
+      <NuxtLink
+        v-for="thing in linkedThings"
+        :key="thing.id"
+        :to="`/things/${thing.id}`"
+        class="inline-flex h-7 max-w-full items-center rounded-full border border-foreground/[0.06] bg-white/70 px-2.5 text-xs font-medium text-foreground/80 hover:text-foreground dark:border-white/10 dark:bg-white/10"
+      >
+        <span class="truncate">{{ thing.name }}</span>
+      </NuxtLink>
     </div>
 
     <p v-if="entry.deleted" class="mt-1 text-sm italic text-muted-foreground">

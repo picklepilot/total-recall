@@ -37,6 +37,8 @@ export interface EntryDoc {
   contentJson: string
   contentText: string
   tags: string[]
+  /** Things this entry is about. Many-to-many; the thing page queries this. */
+  thingIds?: string[]
   createdAt: Timestamp
   /** Structured fields (link, ratings, etc.). */
   widgets?: EntryWidget[]
@@ -59,10 +61,11 @@ export interface EntryDoc {
 export interface EntryView
   extends Omit<
     EntryDoc,
-    'createdAt' | 'parentId' | 'rootId' | 'ancestorIds' | 'depth' | 'deleted' | 'replyCount'
+    'createdAt' | 'parentId' | 'rootId' | 'ancestorIds' | 'depth' | 'deleted' | 'replyCount' | 'thingIds'
   > {
   id: string
   createdAt: Date
+  thingIds: string[]
   parentId: string | null
   rootId: string
   ancestorIds: string[]

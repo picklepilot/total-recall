@@ -1,10 +1,12 @@
 import { getFirestore } from 'firebase-admin/firestore'
-import { applyEmbeddingToEntryDoc } from '../../utils/applyEntryEmbedding'
+import { applyEmbeddingToEntryDoc } from '../../../utils/applyEntryEmbedding'
 
 interface Body {
   entryId?: string
 }
 
+// Nested folder so the route stays POST /api/entries/index.
+// A file named index.post.ts is registered as POST /api/entries.
 export default defineEventHandler(async (event) => {
   const user = await requireVerifiedUser(event)
   const uid = user.uid

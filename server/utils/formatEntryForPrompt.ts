@@ -1,4 +1,5 @@
 import { formatEntryWidgetsPlain } from '~~/shared/entryWidgetsPlain'
+import { formatThingsPlain } from '~~/shared/thingPrompt'
 
 function toDate(ts: { toDate?: () => Date } | undefined): Date {
   if (ts && typeof ts.toDate === 'function') {
@@ -28,6 +29,7 @@ export function formatEntryDocForPrompt(
   id: string,
   data: Record<string, unknown>,
   threadPath: string[] = [],
+  thingNames: string[] = [],
 ): string {
   const createdAt = toDate(data.createdAt as { toDate?: () => Date } | undefined)
   const date = createdAt.toISOString().slice(0, 10)
@@ -40,6 +42,8 @@ export function formatEntryDocForPrompt(
     parts.push(`continues thread: ${threadPath.map((s) => `"${s}"`).join(' > ')}`)
   }
   if (tags.length) parts.push(`tags: ${tags.join(', ')}`)
+  const thingsLine = formatThingsPlain(thingNames)
+  if (thingsLine) parts.push(thingsLine)
   if (widgetsLine) parts.push(`widgets: ${widgetsLine}`)
   if (contentText) parts.push(`note: ${contentText}`)
   else parts.push('note: (empty)')

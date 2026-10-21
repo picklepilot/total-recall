@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import {
+  Box,
   Download,
   History,
   LogOut,
@@ -32,9 +33,15 @@ function toggleColorMode() {
 const navItems = [
   { to: "/", label: "Add", icon: PenLine },
   { to: "/timeline", label: "Timeline", icon: History },
+  { to: "/things", label: "Things", icon: Box },
   { to: "/ask", label: "Ask", icon: Sparkles },
   { to: "/import", label: "Import", icon: Download },
 ];
+
+function isNavActive(to: string) {
+  if (to === "/") return route.path === "/";
+  return route.path === to || route.path.startsWith(`${to}/`);
+}
 
 const userInitial = computed(() =>
   (user.value?.displayName || user.value?.email || "?").charAt(0).toUpperCase(),
@@ -88,10 +95,11 @@ async function onSignIn() {
             :to="item.to"
             class="rounded-full px-3 py-1.5 text-muted-foreground transition-colors hover:text-foreground"
             :class="
-              route.path === item.to
+              isNavActive(item.to)
                 ? 'bg-muted font-medium text-foreground'
                 : ''
             "
+            :aria-current="isNavActive(item.to) ? 'page' : undefined"
           >
             {{ item.label }}
           </NuxtLink>
@@ -174,24 +182,25 @@ async function onSignIn() {
       class="fixed inset-x-0 bottom-0 z-20 border-t border-border/50 bg-background/65 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl sm:hidden"
       aria-label="Main"
     >
-      <div class="mx-auto grid h-16 max-w-md grid-cols-4">
+      <div class="mx-auto grid h-16 max-w-md grid-cols-5">
         <NuxtLink
           v-for="item in navItems"
           :key="item.to"
           :to="item.to"
-          class="flex touch-manipulation flex-col items-center justify-center gap-1 text-[0.7rem] font-medium transition-colors"
+          class="flex touch-manipulation flex-col items-center justify-center gap-1 text-[0.65rem] font-medium transition-colors"
           :class="
-            route.path === item.to ? 'text-foreground' : 'text-muted-foreground'
+            isNavActive(item.to) ? 'text-foreground' : 'text-muted-foreground'
           "
+          :aria-current="isNavActive(item.to) ? 'page' : undefined"
         >
           <span
             class="grid h-7 w-12 place-items-center rounded-full transition-colors"
-            :class="route.path === item.to ? 'bg-muted' : ''"
+            :class="isNavActive(item.to) ? 'bg-muted' : ''"
           >
             <component
               :is="item.icon"
               class="size-[1.15rem]"
-              :stroke-width="route.path === item.to ? 2.25 : 1.75"
+              :stroke-width="isNavActive(item.to) ? 2.25 : 1.75"
             />
           </span>
           {{ item.label }}
